@@ -7,4 +7,5 @@ public class Agent
 {
     public Guid id { get; set; } = new Guid();
     public string hostname { get; set; } = string.Empty;
+    public string? token { get; set; }
 }

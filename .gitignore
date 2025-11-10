@@ -2,11 +2,14 @@
 src/server/obj/*
 src/server/bin/*
 
+# Agent SQLite database
+src/agents/linux/agent.db
+src/agents/linux/agent.db-shm
+src/agents/linux/agent.db-wal
+src/agents/linux/obj/*
+src/agents/linux/bin/*
+
 # Environment variables
 .env
 .env.local
 .env.*.local
-
-#Agents
-src/agents/linux/obj/*
-src/agents/linux/bin/*

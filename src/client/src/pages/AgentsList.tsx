@@ -1,8 +1,19 @@
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
-import { Plus, Pencil } from "lucide-react"
-import { apiGet } from "@/lib/api"
+import { Plus, Pencil, Trash2 } from "lucide-react"
+import { apiGet, apiDelete } from "@/lib/api"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
 interface Agent {
   id: string
@@ -36,6 +47,26 @@ export function AgentsList() {
       }
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleDelete = async (agentId: string, hostname: string) => {
+    try {
+      const token = sessionStorage.getItem("token")
+      if (!token) {
+        navigate("/login")
+        return
+      }
+
+      await apiDelete(`/api/agent/${agentId}`)
+      // Refresh the list
+      fetchAgents()
+    } catch (err) {
+      if (err instanceof TypeError && err.message === "Failed to fetch") {
+        setError("Unable to connect to the server. Please make sure the backend is running.")
+      } else {
+        setError(err instanceof Error ? err.message : "An error occurred while deleting the agent")
+      }
     }
   }
 
@@ -138,17 +169,50 @@ export function AgentsList() {
                       {agent.id}
                     </td>
                     <td className="p-4 align-middle">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          navigate(`/agents/${agent.id}/edit`)
-                        }}
-                      >
-                        <Pencil className="h-4 w-4 mr-2" />
-                        Edit
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            navigate(`/agents/${agent.id}/edit`)
+                          }}
+                        >
+                          <Pencil className="h-4 w-4 mr-2" />
+                          Edit
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This action cannot be undone. This will permanently delete the agent
+                                <strong> {agent.hostname}</strong> and all of its backup plans.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => handleDelete(agent.id, agent.hostname)}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
                     </td>
                   </tr>
                 ))}

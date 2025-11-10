@@ -215,5 +215,34 @@ public class BackupPlanController : ControllerBase
             return StatusCode(500, new { message = "An error occurred while retrieving backup plans" });
         }
     }
+
+    [HttpDelete("{id}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteBackupPlan(Guid id)
+    {
+        try
+        {
+            var backupPlan = await _context.BackupPlans.FindAsync(id);
+
+            if (backupPlan == null)
+            {
+                return NotFound(new { message = "Backup plan not found" });
+            }
+
+            _context.BackupPlans.Remove(backupPlan);
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Backup plan deleted with ID: {BackupPlanId}, Name: {Name}", 
+                backupPlan.id, backupPlan.name);
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting backup plan {BackupPlanId}", id);
+            return StatusCode(500, new { message = "An error occurred while deleting the backup plan" });
+        }
+    }
 }
 

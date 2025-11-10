@@ -1,8 +1,19 @@
 import { useEffect, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Plus, Pencil } from "lucide-react"
-import { apiGet } from "@/lib/api"
+import { ArrowLeft, Plus, Pencil, Trash2 } from "lucide-react"
+import { apiGet, apiDelete } from "@/lib/api"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
 interface BackupPlan {
   id: string
@@ -64,6 +75,27 @@ export function AgentBackupPlans() {
 
     fetchData()
   }, [agentId, navigate])
+
+  const handleDelete = async (planId: string, planName: string) => {
+    try {
+      const token = sessionStorage.getItem("token")
+      if (!token) {
+        navigate("/login")
+        return
+      }
+
+      await apiDelete(`/api/backupplan/${planId}`)
+      // Refresh the list
+      const plansData: BackupPlan[] = await apiGet<BackupPlan[]>(`/api/backupplan/agent/${agentId}`)
+      setBackupPlans(plansData)
+    } catch (err) {
+      if (err instanceof TypeError && err.message === "Failed to fetch") {
+        setError("Unable to connect to the server. Please make sure the backend is running.")
+      } else {
+        setError(err instanceof Error ? err.message : "An error occurred while deleting the backup plan")
+      }
+    }
+  }
 
   if (isLoading) {
     return (
@@ -156,18 +188,50 @@ export function AgentBackupPlans() {
                     </div>
                   </div>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    navigate(`/agents/${agentId}/backup-plans/${plan.id}/edit`)
-                  }}
-                  className="ml-4"
-                >
-                  <Pencil className="h-4 w-4 mr-2" />
-                  Edit
-                </Button>
+                <div className="flex gap-2 ml-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      navigate(`/agents/${agentId}/backup-plans/${plan.id}/edit`)
+                    }}
+                  >
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Edit
+                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This action cannot be undone. This will permanently delete the backup plan
+                          <strong> {plan.name}</strong>.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => handleDelete(plan.id, plan.name)}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          Delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
               </div>
             </div>
           ))}

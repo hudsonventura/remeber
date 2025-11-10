@@ -8,7 +8,9 @@ import { apiPost } from "@/lib/api"
 export function AddAgent() {
   const navigate = useNavigate()
   const [hostname, setHostname] = useState("")
+  const [pairingCode, setPairingCode] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [isValidating, setIsValidating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
@@ -17,6 +19,7 @@ export function AddAgent() {
     setError(null)
     setSuccess(false)
     setIsLoading(true)
+    setIsValidating(true)
 
     try {
       const token = sessionStorage.getItem("token")
@@ -25,11 +28,20 @@ export function AddAgent() {
         return
       }
 
+      if (pairingCode.trim().length !== 6) {
+        setError("Pairing code must be exactly 6 digits")
+        setIsLoading(false)
+        setIsValidating(false)
+        return
+      }
+
       await apiPost("/api/agent", {
         hostname: hostname.trim(),
+        pairingCode: pairingCode.trim(),
       })
       setSuccess(true)
       setHostname("")
+      setPairingCode("")
       
       // Redirect to agents list after a short delay
       setTimeout(() => {
@@ -43,6 +55,7 @@ export function AddAgent() {
       }
     } finally {
       setIsLoading(false)
+      setIsValidating(false)
     }
   }
 
@@ -74,7 +87,7 @@ export function AddAgent() {
             <Input
               id="hostname"
               type="text"
-              placeholder="example-server-01"
+              placeholder="localhost:5001 or https://agent.example.com"
               value={hostname}
               onChange={(e) => setHostname(e.target.value)}
               required
@@ -82,13 +95,33 @@ export function AddAgent() {
               className="max-w-md"
             />
             <p className="text-sm text-muted-foreground">
-              Enter the hostname or identifier for the agent
+              Enter the hostname or address of the agent
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="pairingCode">Pairing Code *</Label>
+            <Input
+              id="pairingCode"
+              type="text"
+              placeholder="123456"
+              value={pairingCode}
+              onChange={(e) => setPairingCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              required
+              disabled={isLoading}
+              className="max-w-md"
+              maxLength={6}
+              minLength={6}
+            />
+            <p className="text-sm text-muted-foreground">
+              Enter the 6-digit pairing code displayed in the agent's console. 
+              This code is required to pair the agent and generate an authentication token.
             </p>
           </div>
 
           <div className="flex gap-4">
             <Button type="submit" disabled={isLoading}>
-              {isLoading ? "Creating..." : "Create Agent"}
+              {isValidating ? "Validating agent..." : isLoading ? "Creating..." : "Create Agent"}
             </Button>
             <Button
               type="button"

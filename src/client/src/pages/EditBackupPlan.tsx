@@ -3,8 +3,19 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft } from "lucide-react"
-import { apiGet, apiPut } from "@/lib/api"
+import { ArrowLeft, Trash2 } from "lucide-react"
+import { apiGet, apiPut, apiDelete } from "@/lib/api"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
 interface BackupPlan {
   id: string
@@ -124,6 +135,31 @@ export function EditBackupPlan() {
       }
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!planId) {
+      setError("Backup plan ID is required")
+      return
+    }
+
+    try {
+      const token = sessionStorage.getItem("token")
+      if (!token) {
+        navigate("/login")
+        return
+      }
+
+      await apiDelete(`/api/backupplan/${planId}`)
+      // Redirect back to the appropriate page
+      navigate(getBackPath())
+    } catch (err) {
+      if (err instanceof TypeError && err.message === "Failed to fetch") {
+        setError("Unable to connect to the server. Please make sure the backend is running.")
+      } else {
+        setError(err instanceof Error ? err.message : "An error occurred while deleting the backup plan")
+      }
     }
   }
 
@@ -249,19 +285,50 @@ export function EditBackupPlan() {
             </p>
           </div>
 
-          <div className="flex gap-4">
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? "Saving..." : "Save Changes"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => navigate(getBackPath())}
-              disabled={isLoading}
-            >
-              Cancel
-            </Button>
-          </div>
+              <div className="flex gap-4">
+                <Button type="submit" disabled={isLoading}>
+                  {isLoading ? "Saving..." : "Save Changes"}
+                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={isLoading}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This action cannot be undone. This will permanently delete the backup plan
+                        <strong> {name}</strong>.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={handleDelete}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => navigate(getBackPath())}
+                  disabled={isLoading}
+                >
+                  Cancel
+                </Button>
+              </div>
         </form>
       </div>
     </div>

@@ -1,12 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
 
-namespace server.Controllers;
+namespace agent.Controllers;
 
 [ApiController]
 [Route("[controller]")]
 public class PongController : ControllerBase
 {
-
     private readonly ILogger<PongController> _logger;
 
     public PongController(ILogger<PongController> logger)
@@ -14,9 +13,10 @@ public class PongController : ControllerBase
         _logger = logger;
     }
 
-    [HttpGet("/Pong")]
+    [HttpGet]
     public IActionResult Get()
     {
-        return Ok();
+        _logger.LogInformation("Pong endpoint called");
+        return Ok(new { message = "Pong", timestamp = DateTime.UtcNow });
     }
 }
