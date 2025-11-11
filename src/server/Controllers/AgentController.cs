@@ -230,6 +230,133 @@ public class AgentController : ControllerBase
         }
     }
 
+    [HttpGet("{id}/browse")]
+    [ProducesResponseType(typeof(List<FileSystemItem>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> BrowseAgentFileSystem(Guid id, [FromQuery] string? dir)
+    {
+        try
+        {
+            var agent = await _context.Agents.FindAsync(id);
+
+            if (agent == null)
+            {
+                return NotFound(new { message = "Agent not found" });
+            }
+
+            if (string.IsNullOrEmpty(agent.token))
+            {
+                return Unauthorized(new { message = "Agent is not authenticated. Please pair the agent first." });
+            }
+
+            // Determine base URL
+            var hostname = agent.hostname;
+            string baseUrl;
+            
+            if (hostname.StartsWith("http://"))
+            {
+                baseUrl = hostname;
+            }
+            else if (hostname.StartsWith("https://"))
+            {
+                baseUrl = hostname;
+            }
+            else
+            {
+                // Try HTTPS first, then HTTP as fallback
+                string[] protocolsToTry = new[] { "https://", "http://" };
+                foreach (var protocol in protocolsToTry)
+                {
+                    var testUrl = $"{protocol}{hostname}/Browse?dir={Uri.EscapeDataString(dir ?? "/")}";
+                    var result = await TryCallBrowseEndpoint(testUrl, agent.token);
+                    if (result.Success && result.Items != null)
+                    {
+                        return Ok(result.Items);
+                    }
+                }
+                return StatusCode(503, new { message = "Failed to connect to agent" });
+            }
+
+            var browseUrl = $"{baseUrl}/Browse?dir={Uri.EscapeDataString(dir ?? "/")}";
+            var response = await TryCallBrowseEndpoint(browseUrl, agent.token);
+            
+            if (!response.Success)
+            {
+                return StatusCode(503, new { message = response.ErrorMessage ?? "Failed to browse agent file system" });
+            }
+
+            return Ok(response.Items ?? new List<FileSystemItem>());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error browsing agent {AgentId} file system", id);
+            return StatusCode(500, new { message = "An error occurred while browsing the file system" });
+        }
+    }
+
+    private async Task<(bool Success, List<FileSystemItem>? Items, string? ErrorMessage)> TryCallBrowseEndpoint(string url, string agentToken)
+    {
+        var httpClientHandler = new HttpClientHandler();
+        
+        if (_environment.IsDevelopment())
+        {
+            httpClientHandler.ServerCertificateCustomValidationCallback = 
+                (HttpRequestMessage message, X509Certificate2? certificate, X509Chain? chain, SslPolicyErrors sslPolicyErrors) =>
+                {
+                    return true;
+                };
+        }
+
+        using var httpClient = new HttpClient(httpClientHandler);
+        httpClient.Timeout = TimeSpan.FromSeconds(30);
+        
+        httpClient.DefaultRequestHeaders.Add("X-Agent-Token", agentToken);
+
+        try
+        {
+            _logger.LogInformation("Calling browse endpoint at {Url}", url);
+
+            var response = await httpClient.GetAsync(url);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var items = await response.Content.ReadFromJsonAsync<List<FileSystemItem>>();
+                _logger.LogInformation("Browse endpoint call successful, retrieved {Count} items", items?.Count ?? 0);
+                return (true, items ?? new List<FileSystemItem>(), null);
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("Authentication failed at {Url}: {StatusCode}, {Error}", 
+                    url, response.StatusCode, errorContent);
+                return (false, null, "Authentication failed: Invalid or expired token");
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("Browse endpoint call failed: {StatusCode}, {Error}", 
+                    response.StatusCode, errorContent);
+                return (false, null, $"Request failed with status {response.StatusCode}");
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "Failed to connect to browse endpoint at {Url}", url);
+            return (false, null, $"Cannot reach agent: {ex.Message}");
+        }
+        catch (TaskCanceledException)
+        {
+            _logger.LogError("Timeout while calling browse endpoint at {Url}", url);
+            return (false, null, "Connection timeout");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error calling browse endpoint at {Url}", url);
+            return (false, null, $"Error: {ex.Message}");
+        }
+    }
+
     [HttpDelete("{id}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

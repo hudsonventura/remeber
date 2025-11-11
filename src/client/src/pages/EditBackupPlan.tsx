@@ -3,8 +3,9 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, Trash2 } from "lucide-react"
+import { ArrowLeft, Trash2, FolderOpen } from "lucide-react"
 import { apiGet, apiPut, apiDelete } from "@/lib/api"
+import { FileBrowser } from "@/components/FileBrowser"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,6 +48,7 @@ export function EditBackupPlan() {
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingData, setIsLoadingData] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showFileBrowser, setShowFileBrowser] = useState(false)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -255,15 +257,29 @@ export function EditBackupPlan() {
 
           <div className="space-y-2">
             <Label htmlFor="source">Source Path *</Label>
-            <Input
-              id="source"
-              type="text"
-              placeholder="/path/to/source"
-              value={source}
-              onChange={(e) => setSource(e.target.value)}
-              required
-              disabled={isLoading}
-            />
+            <div className="flex gap-2">
+              <Input
+                id="source"
+                type="text"
+                placeholder="/path/to/source"
+                value={source}
+                onChange={(e) => setSource(e.target.value)}
+                required
+                disabled={isLoading}
+                className="flex-1"
+              />
+              {agentId && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowFileBrowser(true)}
+                  disabled={isLoading}
+                  title="Browse file system on agent"
+                >
+                  <FolderOpen className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
             <p className="text-sm text-muted-foreground">
               Path to the files/directories to backup
             </p>
@@ -331,6 +347,18 @@ export function EditBackupPlan() {
               </div>
         </form>
       </div>
+
+      {agentId && (
+        <FileBrowser
+          agentId={agentId}
+          open={showFileBrowser}
+          onClose={() => setShowFileBrowser(false)}
+          onSelect={(path) => {
+            setSource(path)
+            setShowFileBrowser(false)
+          }}
+        />
+      )}
     </div>
   )
 }
