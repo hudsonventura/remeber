@@ -39,13 +39,14 @@ export function CronDescription({ cronExpression }: CronDescriptionProps) {
       
       const isValidCron = result !== "Invalid cron expression"
       
-      // Calculate next execution time
+      // Calculate next execution time in UTC
       let nextExec: Date | null = null
       if (isValidCron) {
         try {
           // cron-parser uses parse as a static method on CronExpressionParser
+          // Use UTC timezone to match server timezone
           const interval = CronExpressionParser.parse(cronForParsing, {
-            tz: Intl.DateTimeFormat().resolvedOptions().timeZone
+            tz: 'UTC'
           })
           nextExec = interval.next().toDate()
         } catch (parseError) {
@@ -81,6 +82,21 @@ export function CronDescription({ cronExpression }: CronDescriptionProps) {
     const diffHours = Math.floor(diffMs / 3600000)
     const diffDays = Math.floor(diffMs / 86400000)
     
+    // Format date and time in 24-hour format in UTC
+    const dateStr = date.toLocaleDateString('en-US', { 
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      timeZone: 'UTC'
+    })
+    const timeStr = date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      timeZone: 'UTC'
+    })
+    
     let relativeTime: string
     if (diffMins < 1) {
       relativeTime = "in less than a minute"
@@ -91,10 +107,31 @@ export function CronDescription({ cronExpression }: CronDescriptionProps) {
     } else if (diffDays < 7) {
       relativeTime = `in ${diffDays} day${diffDays !== 1 ? 's' : ''}`
     } else {
-      relativeTime = `on ${date.toLocaleDateString()} at ${date.toLocaleTimeString()}`
+      relativeTime = `on ${dateStr} at ${timeStr} UTC`
     }
     
     return relativeTime
+  }
+  
+  const formatFullDateTime = (date: Date | null) => {
+    if (!date) return null
+    
+    // Format date and time in 24-hour format in UTC
+    const dateStr = date.toLocaleDateString('en-US', { 
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      timeZone: 'UTC'
+    })
+    const timeStr = date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      timeZone: 'UTC'
+    })
+    
+    return `${dateStr} ${timeStr} UTC`
   }
 
   return (
@@ -112,7 +149,7 @@ export function CronDescription({ cronExpression }: CronDescriptionProps) {
           <span className="font-medium">Next execution: </span>
           <span>{formatNextExecution(nextExecution)}</span>
           <span className="ml-1">
-            ({nextExecution.toLocaleString()})
+            ({formatFullDateTime(nextExecution)})
           </span>
         </div>
       )}
