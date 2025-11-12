@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label"
 import { ArrowLeft, FolderOpen } from "lucide-react"
 import { apiGet, apiPost } from "@/lib/api"
 import { FileBrowser } from "@/components/FileBrowser"
+import { ServerFileBrowser } from "@/components/ServerFileBrowser"
 
 interface Agent {
   id: string
@@ -25,6 +26,7 @@ export function AddBackupPlan() {
   const [isLoadingAgent, setIsLoadingAgent] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showFileBrowser, setShowFileBrowser] = useState(false)
+  const [showServerFileBrowser, setShowServerFileBrowser] = useState(false)
 
   useEffect(() => {
     const fetchAgent = async () => {
@@ -209,17 +211,29 @@ export function AddBackupPlan() {
 
           <div className="space-y-2">
             <Label htmlFor="destination">Destination Path *</Label>
-            <Input
-              id="destination"
-              type="text"
-              placeholder="/path/to/destination"
-              value={destination}
-              onChange={(e) => setDestination(e.target.value)}
-              required
-              disabled={isLoading}
-            />
+            <div className="flex gap-2">
+              <Input
+                id="destination"
+                type="text"
+                placeholder="/path/to/destination"
+                value={destination}
+                onChange={(e) => setDestination(e.target.value)}
+                required
+                disabled={isLoading}
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowServerFileBrowser(true)}
+                disabled={isLoading}
+                title="Browse server file system"
+              >
+                <FolderOpen className="h-4 w-4" />
+              </Button>
+            </div>
             <p className="text-sm text-muted-foreground">
-              Path where the backup will be stored
+              Path where the backup will be stored on the server
             </p>
           </div>
 
@@ -250,6 +264,15 @@ export function AddBackupPlan() {
           }}
         />
       )}
+
+      <ServerFileBrowser
+        open={showServerFileBrowser}
+        onClose={() => setShowServerFileBrowser(false)}
+        onSelect={(path) => {
+          setDestination(path)
+          setShowServerFileBrowser(false)
+        }}
+      />
     </div>
   )
 }

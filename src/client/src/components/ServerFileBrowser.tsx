@@ -1,0 +1,192 @@
+import { useState, useEffect } from "react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { apiGet } from "@/lib/api"
+import { Folder, File, ArrowLeft, X } from "lucide-react"
+
+interface FileSystemItem {
+  name: string
+  path: string
+  type: "file" | "directory"
+  size?: number | null
+  lastModified: string
+  permissions?: string | null
+  md5?: string | null
+}
+
+interface ServerFileBrowserProps {
+  open: boolean
+  onClose: () => void
+  onSelect: (path: string) => void
+}
+
+export function ServerFileBrowser({ open, onClose, onSelect }: ServerFileBrowserProps) {
+  const [currentPath, setCurrentPath] = useState("")
+  const [items, setItems] = useState<FileSystemItem[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [pathHistory, setPathHistory] = useState<string[]>([])
+
+  useEffect(() => {
+    if (open) {
+      // Start with empty path - server will determine the default root based on OS
+      const initialPath = ""
+      setCurrentPath(initialPath)
+      setPathHistory([initialPath])
+      loadDirectory(initialPath)
+    }
+  }, [open])
+
+  const loadDirectory = async (path: string) => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const url = path 
+        ? `/api/filesystem/browse?dir=${encodeURIComponent(path)}`
+        : `/api/filesystem/browse`
+      const data: FileSystemItem[] = await apiGet<FileSystemItem[]>(url)
+      setItems(data)
+      
+      // Determine the actual path from the items
+      if (data.length > 0) {
+        // Extract parent path from first item
+        const firstItem = data[0]
+        // Remove the item name from the path to get the directory path
+        const itemPath = firstItem.path
+        const itemName = firstItem.name
+        const directoryPath = itemPath.substring(0, itemPath.length - itemName.length - (itemPath.endsWith("/") || itemPath.endsWith("\\") ? 0 : 1))
+        setCurrentPath(directoryPath || (path || "/"))
+      } else {
+        // If no items, use the provided path or default
+        setCurrentPath(path || "/")
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load directory")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleItemClick = (item: FileSystemItem) => {
+    if (item.type === "directory") {
+      const newPath = item.path
+      setPathHistory([...pathHistory, newPath])
+      loadDirectory(newPath)
+    } else {
+      onSelect(item.path)
+      onClose()
+    }
+  }
+
+  const handleGoBack = () => {
+    if (pathHistory.length > 1) {
+      const newHistory = pathHistory.slice(0, -1)
+      const previousPath = newHistory[newHistory.length - 1]
+      setPathHistory(newHistory)
+      loadDirectory(previousPath)
+    }
+  }
+
+  const handleSelectCurrentPath = () => {
+    const pathToSelect = currentPath || "/"
+    onSelect(pathToSelect)
+    onClose()
+  }
+
+  if (!open) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div
+        className="fixed inset-0 bg-black/80"
+        onClick={onClose}
+      />
+      <div className="relative z-50 w-full max-w-2xl max-h-[80vh] bg-background border rounded-lg shadow-lg flex flex-col">
+        <div className="flex items-center justify-between p-4 border-b">
+          <h2 className="text-xl font-semibold">Browse Server File System</h2>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-2 p-4 border-b">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleGoBack}
+            disabled={pathHistory.length <= 1 || isLoading}
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back
+          </Button>
+          <Input
+            value={currentPath || "/"}
+            readOnly
+            className="flex-1 font-mono text-sm"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadDirectory(currentPath)}
+            disabled={isLoading}
+          >
+            Refresh
+          </Button>
+        </div>
+
+        <div className="flex-1 overflow-auto p-4">
+          {error && (
+            <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive mb-4">
+              {error}
+            </div>
+          )}
+
+          {isLoading ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Loading...
+            </div>
+          ) : items.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              This directory is empty
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {items.map((item) => (
+                <button
+                  key={item.path}
+                  onClick={() => handleItemClick(item)}
+                  className="w-full flex items-center gap-3 p-2 rounded hover:bg-accent text-left transition-colors"
+                >
+                  {item.type === "directory" ? (
+                    <Folder className="h-5 w-5 text-blue-500 flex-shrink-0" />
+                  ) : (
+                    <File className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{item.name}</div>
+                    {item.type === "file" && item.size !== null && (
+                      <div className="text-xs text-muted-foreground">
+                        {(item.size / 1024).toFixed(2)} KB
+                      </div>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 p-4 border-t">
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={handleSelectCurrentPath}>
+            Select Current Path
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+

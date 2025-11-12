@@ -47,6 +47,15 @@ export async function apiRequest<T = any>(
   })
 
   if (!response.ok) {
+    // Handle 401 Unauthorized - redirect to login
+    if (response.status === 401) {
+      sessionStorage.removeItem("token")
+      sessionStorage.removeItem("email")
+      sessionStorage.removeItem("expiresAt")
+      window.location.href = "/login"
+      throw new Error("Unauthorized - please log in again")
+    }
+
     const errorData = await response.json().catch(() => ({ 
       message: `HTTP error! status: ${response.status}` 
     }))
