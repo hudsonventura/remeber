@@ -81,42 +81,16 @@ public class BackupRunner : IHostedService
         {
             var now = DateTime.UtcNow;
             
+            // Reload backup plans at the beginning of each minute
+            LoadBackupPlans();
+            
+            // Get backup plans for checking schedules
             using var scope = _serviceScopeFactory.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<DBContext>();
             
-            // Reload backup plans to get any updates
             var backupPlans = dbContext.BackupPlans
                 .Include(bp => bp.agent)
                 .ToList();
-            
-            // Update cron schedules for new or modified plans
-            foreach (var plan in backupPlans)
-            {
-                if (!_cronSchedules.ContainsKey(plan.id))
-                {
-                    try
-                    {
-                        var cronSchedule = CrontabSchedule.Parse(plan.schedule);
-                        _cronSchedules[plan.id] = cronSchedule;
-                        _logger.LogInformation("Added new backup plan '{Name}' (ID: {Id}) with schedule: {Schedule}", 
-                            plan.name, plan.id, plan.schedule);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Failed to parse cron schedule '{Schedule}' for backup plan '{Name}' (ID: {Id})", 
-                            plan.schedule, plan.name, plan.id);
-                    }
-                }
-            }
-            
-            // Remove plans that no longer exist
-            var existingPlanIds = backupPlans.Select(p => p.id).ToHashSet();
-            var plansToRemove = _cronSchedules.Keys.Where(id => !existingPlanIds.Contains(id)).ToList();
-            foreach (var planId in plansToRemove)
-            {
-                _cronSchedules.Remove(planId);
-                _logger.LogInformation("Removed backup plan (ID: {Id}) from monitoring", planId);
-            }
             
             // Check each cron schedule
             foreach (var kvp in _cronSchedules)

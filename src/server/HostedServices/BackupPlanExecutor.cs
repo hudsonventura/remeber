@@ -1,172 +1,671 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Http;
-using System.Net.Http.Json;
 using System.Security.Cryptography.X509Certificates;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Hosting;
 using server.Data;
 using server.Models;
 
-namespace server.HostedServices
+namespace server.HostedServices;
+
+public class BackupPlanExecutor
 {
-    public class BackupPlanExecutor
+    private readonly ILogger<BackupPlanExecutor> _logger;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
+    private readonly IWebHostEnvironment _environment;
+
+    public BackupPlanExecutor(
+        ILogger<BackupPlanExecutor> logger, 
+        IServiceScopeFactory serviceScopeFactory,
+        IWebHostEnvironment environment)
     {
-        private readonly ILogger<BackupPlanExecutor> _logger;
-        private readonly IServiceScopeFactory _serviceScopeFactory;
-        private readonly IWebHostEnvironment _environment;
+        _logger = logger;
+        _serviceScopeFactory = serviceScopeFactory;
+        _environment = environment;
+    }
 
-        public BackupPlanExecutor(
-            ILogger<BackupPlanExecutor> logger, 
-            IServiceScopeFactory serviceScopeFactory,
-            IWebHostEnvironment environment)
+    public async Task ExecuteBackupPlanAsync(BackupPlan backupPlan, Agent agent)
+    {
+        try
         {
-            _logger = logger;
-            _serviceScopeFactory = serviceScopeFactory;
-            _environment = environment;
+            using var scope = _serviceScopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<DBContext>();
+
+            _logger.LogInformation("Executing backup plan {BackupPlanId} for agent {AgentHostname}", backupPlan.id, agent.hostname);
+
+            // Reload agent from database to ensure we have the latest token
+            var agentFromDb = await dbContext.Agents.FindAsync(agent.id);
+            if (agentFromDb == null)
+            {
+                _logger.LogError("Agent {AgentId} not found in database", agent.id);
+                throw new InvalidOperationException($"Agent {agent.id} not found");
+            }
+
+            // Check if agent has a token
+            if (string.IsNullOrEmpty(agentFromDb.token))
+            {
+                _logger.LogError("Agent {AgentHostname} does not have a token. Cannot execute backup plan {BackupPlanId}",
+                    agentFromDb.hostname, backupPlan.id);
+                throw new InvalidOperationException($"Agent {agentFromDb.hostname} is not authenticated. Please pair the agent first.");
+            }
+
+            // Call the /Look endpoint to get file system items from source (remote agent)
+            var sourceFileSystemItems = await CallLookEndpointAsync(agentFromDb, backupPlan.source);
+
+            _logger.LogInformation("Retrieved {Count} file system items from agent {AgentHostname} for path {Source}",
+                sourceFileSystemItems.Count, agentFromDb.hostname, backupPlan.source);
+
+            // Get file system items from local destination
+            var destinationFileSystemItems = GetLocalFileSystemItems(backupPlan.destination);
+
+            _logger.LogInformation("Retrieved {Count} file system items from local destination {Destination}",
+                destinationFileSystemItems.Count, backupPlan.destination);
+
+            // Compare source and destination to determine what to copy and delete
+            var comparisonResult = CompareFileSystemItems(
+                sourceFileSystemItems,
+                destinationFileSystemItems,
+                backupPlan.source,
+                backupPlan.destination);
+
+            _logger.LogInformation(
+                "Comparison complete: {CopyCount} items to copy, {DeleteCount} items to delete",
+                comparisonResult.NewItems.Count,
+                comparisonResult.DeletedItems.Count);
+
+            // Delete files from destination that don't exist in source
+            await DeleteFilesFromDestination(comparisonResult.DeletedItems, backupPlan.destination);
+
+            // Copy files from source (agent) to destination
+            await CopyFilesFromSource(comparisonResult.NewItems, agentFromDb, backupPlan.source, backupPlan.destination);
+
+            _logger.LogInformation("Backup plan {BackupPlanId} execution completed successfully", backupPlan.id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error executing backup plan {BackupPlanId}", backupPlan.id);
+            throw;
+        }
+    }
+
+    private async Task<List<FileSystemItem>> CallLookEndpointAsync(Agent agent, string sourcePath)
+    {
+        // Determine base URL - try HTTPS first, then HTTP
+        string baseUrl;
+        var hostname = agent.hostname;
+        
+        if (hostname.StartsWith("http://"))
+        {
+            baseUrl = hostname;
+            hostname = hostname.Substring(7);
+        }
+        else if (hostname.StartsWith("https://"))
+        {
+            baseUrl = hostname;
+            hostname = hostname.Substring(8);
+        }
+        else
+        {
+            // Try HTTPS first, then HTTP as fallback
+            string[] protocolsToTry = new[] { "https://", "http://" };
+            foreach (var protocol in protocolsToTry)
+            {
+                var testUrl = $"{protocol}{hostname}/Look?dir={Uri.EscapeDataString(sourcePath)}";
+                var result = await TryCallLookEndpointAsync(testUrl, agent.token!);
+                if (result.Success && result.Items != null)
+                {
+                    return result.Items;
+                }
+            }
+            throw new HttpRequestException($"Failed to connect to agent at {agent.hostname}");
         }
 
-        public async Task ExecuteBackupPlanAsync(BackupPlan backupPlan, Agent agent)
+        var lookUrl = $"{baseUrl}/Look?dir={Uri.EscapeDataString(sourcePath)}";
+        var response = await TryCallLookEndpointAsync(lookUrl, agent.token!);
+        
+        if (!response.Success)
         {
-            try
-            {
-                using var scope = _serviceScopeFactory.CreateScope();
-                var dbContext = scope.ServiceProvider.GetRequiredService<DBContext>();
-
-                _logger.LogInformation("Executing backup plan {BackupPlanId} for agent {AgentHostname}", backupPlan.id, agent.hostname);
-
-                // Reload agent from database to ensure we have the latest token
-                var agentFromDb = await dbContext.Agents.FindAsync(agent.id);
-                if (agentFromDb == null)
-                {
-                    _logger.LogError("Agent {AgentId} not found in database", agent.id);
-                    throw new InvalidOperationException($"Agent {agent.id} not found");
-                }
-
-                // Check if agent has a token
-                if (string.IsNullOrEmpty(agentFromDb.token))
-                {
-                    _logger.LogError("Agent {AgentHostname} does not have a token. Cannot execute backup plan {BackupPlanId}", 
-                        agentFromDb.hostname, backupPlan.id);
-                    throw new InvalidOperationException($"Agent {agentFromDb.hostname} is not authenticated. Please pair the agent first.");
-                }
-
-                // Call the /Look endpoint to get file system items
-                var fileSystemItems = await CallLookEndpointAsync(agentFromDb, backupPlan.source);
-                
-                _logger.LogInformation("Retrieved {Count} file system items from agent {AgentHostname} for path {Source}", 
-                    fileSystemItems.Count, agentFromDb.hostname, backupPlan.source);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error executing backup plan {BackupPlanId}", backupPlan.id);
-                throw;
-            }
+            throw new HttpRequestException($"Failed to call /Look endpoint: {response.ErrorMessage}");
         }
 
-        private async Task<List<FileSystemItem>> CallLookEndpointAsync(Agent agent, string sourcePath)
+        return response.Items ?? new List<FileSystemItem>();
+    }
+
+    private async Task<(bool Success, List<FileSystemItem>? Items, string ErrorMessage)> TryCallLookEndpointAsync(string url, string agentToken)
+    {
+        // Configure HttpClient to accept self-signed certificates in development
+        var httpClientHandler = new HttpClientHandler();
+        
+        if (_environment.IsDevelopment())
         {
-            // Determine base URL - try HTTPS first, then HTTP
-            string baseUrl;
-            var hostname = agent.hostname;
-            
-            if (hostname.StartsWith("http://"))
+            httpClientHandler.ServerCertificateCustomValidationCallback = 
+                (HttpRequestMessage message, X509Certificate2? certificate, X509Chain? chain, System.Net.Security.SslPolicyErrors sslPolicyErrors) =>
+                {
+                    return true;
+                };
+        }
+
+        using var httpClient = new HttpClient(httpClientHandler);
+        httpClient.Timeout = TimeSpan.FromMinutes(5); // Longer timeout for file system operations
+        
+        // Add the authentication token header
+        httpClient.DefaultRequestHeaders.Add("X-Agent-Token", agentToken);
+
+        try
+        {
+            _logger.LogInformation("Calling /Look endpoint at {Url}", url);
+
+            var response = await httpClient.GetAsync(url);
+
+            if (response.IsSuccessStatusCode)
             {
-                baseUrl = hostname;
-                hostname = hostname.Substring(7);
+                var items = await response.Content.ReadFromJsonAsync<List<FileSystemItem>>();
+                _logger.LogInformation("Successfully retrieved {Count} items from /Look endpoint", items?.Count ?? 0);
+                return (true, items ?? new List<FileSystemItem>(), string.Empty);
             }
-            else if (hostname.StartsWith("https://"))
+            else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
-                baseUrl = hostname;
-                hostname = hostname.Substring(8);
+                var errorContent = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("Authentication failed at {Url}: {StatusCode}, {Error}", 
+                    url, response.StatusCode, errorContent);
+                return (false, null, "Authentication failed: Invalid or expired token");
             }
             else
             {
-                // Try HTTPS first, then HTTP as fallback
-                string[] protocolsToTry = new[] { "https://", "http://" };
-                foreach (var protocol in protocolsToTry)
-                {
-                    var testUrl = $"{protocol}{hostname}/Look?dir={Uri.EscapeDataString(sourcePath)}";
-                    var result = await TryCallLookEndpointAsync(testUrl, agent.token!);
-                    if (result.Success && result.Items != null)
-                    {
-                        return result.Items;
-                    }
-                }
-                throw new HttpRequestException($"Failed to connect to agent at {agent.hostname}");
+                var errorContent = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("Failed to call /Look endpoint at {Url}: {StatusCode}, {Error}", 
+                    url, response.StatusCode, errorContent);
+                return (false, null, $"HTTP {response.StatusCode}: {errorContent}");
             }
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogError(ex, "Timeout calling /Look endpoint at {Url}", url);
+            return (false, null, "Request timeout");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error calling /Look endpoint at {Url}", url);
+            return (false, null, ex.Message);
+        }
+    }
 
-            var lookUrl = $"{baseUrl}/Look?dir={Uri.EscapeDataString(sourcePath)}";
-            var response = await TryCallLookEndpointAsync(lookUrl, agent.token!);
-            
-            if (!response.Success)
+    private List<FileSystemItem> GetLocalFileSystemItems(string destinationPath)
+    {
+        var items = new List<FileSystemItem>();
+
+        try
+        {
+            // Security check: prevent directory traversal attacks
+            if (destinationPath.Contains(".."))
             {
-                throw new HttpRequestException($"Failed to call /Look endpoint: {response.ErrorMessage}");
+                _logger.LogWarning("Potentially unsafe destination path: {Path}", destinationPath);
+                throw new ArgumentException("Invalid destination path: directory traversal (..) is not allowed");
             }
 
-            return response.Items ?? new List<FileSystemItem>();
+            // Check if directory exists, create if it doesn't
+            if (!Directory.Exists(destinationPath))
+            {
+                _logger.LogInformation("Destination directory does not exist, creating: {Path}", destinationPath);
+                Directory.CreateDirectory(destinationPath);
+            }
+
+            // Get directory info
+            var directoryInfo = new DirectoryInfo(destinationPath);
+
+            // Recursively get all directories and files
+            GetAllDirectoriesAndFiles(directoryInfo, items);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "Access denied to destination directory: {Path}", destinationPath);
+            throw new UnauthorizedAccessException($"Access denied to destination directory: {destinationPath}", ex);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reading destination directory: {Path}", destinationPath);
+            throw;
         }
 
-        private async Task<(bool Success, List<FileSystemItem>? Items, string ErrorMessage)> TryCallLookEndpointAsync(string url, string agentToken)
+        // Sort: directories first, then files, both alphabetically
+        return items
+            .OrderBy(i => i.Type == "file") // Directories first (false < true)
+            .ThenBy(i => i.Name)
+            .ToList();
+    }
+
+    private void GetAllDirectoriesAndFiles(DirectoryInfo directory, List<FileSystemItem> items)
+    {
+        // Get immediate subdirectories
+        DirectoryInfo[] subdirectories;
+        try
         {
-            // Configure HttpClient to accept self-signed certificates in development
-            var httpClientHandler = new HttpClientHandler();
-            
-            if (_environment.IsDevelopment())
-            {
-                httpClientHandler.ServerCertificateCustomValidationCallback = 
-                    (HttpRequestMessage message, X509Certificate2? certificate, X509Chain? chain, System.Net.Security.SslPolicyErrors sslPolicyErrors) =>
-                    {
-                        return true;
-                    };
-            }
+            subdirectories = directory.GetDirectories();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _logger.LogWarning("Access denied to directory: {Path}", directory.FullName);
+            return;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error getting subdirectories from: {Path}", directory.FullName);
+            return;
+        }
 
-            using var httpClient = new HttpClient(httpClientHandler);
-            httpClient.Timeout = TimeSpan.FromMinutes(5); // Longer timeout for file system operations
-            
-            // Add the authentication token header
-            httpClient.DefaultRequestHeaders.Add("X-Agent-Token", agentToken);
-
+        foreach (var dirInfo in subdirectories)
+        {
             try
             {
-                _logger.LogInformation("Calling /Look endpoint at {Url}", url);
+                items.Add(new FileSystemItem
+                {
+                    Name = dirInfo.Name,
+                    Path = dirInfo.FullName,
+                    Type = "directory",
+                    Size = null,
+                    LastModified = dirInfo.LastWriteTimeUtc,
+                    Permissions = GetUnixPermissions(dirInfo.FullName)
+                });
 
-                var response = await httpClient.GetAsync(url);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    var items = await response.Content.ReadFromJsonAsync<List<FileSystemItem>>();
-                    _logger.LogInformation("Successfully retrieved {Count} items from /Look endpoint", items?.Count ?? 0);
-                    return (true, items ?? new List<FileSystemItem>(), string.Empty);
-                }
-                else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-                {
-                    var errorContent = await response.Content.ReadAsStringAsync();
-                    _logger.LogWarning("Authentication failed at {Url}: {StatusCode}, {Error}", 
-                        url, response.StatusCode, errorContent);
-                    return (false, null, "Authentication failed: Invalid or expired token");
-                }
-                else
-                {
-                    var errorContent = await response.Content.ReadAsStringAsync();
-                    _logger.LogWarning("Failed to call /Look endpoint at {Url}: {StatusCode}, {Error}", 
-                        url, response.StatusCode, errorContent);
-                    return (false, null, $"HTTP {response.StatusCode}: {errorContent}");
-                }
-            }
-            catch (TaskCanceledException ex)
-            {
-                _logger.LogError(ex, "Timeout calling /Look endpoint at {Url}", url);
-                return (false, null, "Request timeout");
+                // Recursively process subdirectories
+                GetAllDirectoriesAndFiles(dirInfo, items);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error calling /Look endpoint at {Url}", url);
-                return (false, null, ex.Message);
+                // Log but continue processing other directories
+                _logger.LogWarning(ex, "Error processing subdirectory: {Path}", dirInfo.FullName);
             }
+        }
+
+        // Get files in current directory
+        FileInfo[] files;
+        try
+        {
+            files = directory.GetFiles();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Can't read files, but we already processed subdirectories, so just return
+            return;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error getting files from: {Path}", directory.FullName);
+            return;
+        }
+
+        foreach (var fileInfo in files)
+        {
+            try
+            {
+                items.Add(new FileSystemItem
+                {
+                    Name = fileInfo.Name,
+                    Path = fileInfo.FullName,
+                    Type = "file",
+                    Size = fileInfo.Length,
+                    LastModified = fileInfo.LastWriteTimeUtc,
+                    Permissions = GetUnixPermissions(fileInfo.FullName),
+                    Md5 = null // Don't calculate MD5 for browsing (too slow)
+                });
+            }
+            catch (Exception ex)
+            {
+                // Log but continue processing other files
+                _logger.LogWarning(ex, "Error processing file: {Path}", fileInfo.FullName);
+            }
+        }
+    }
+
+    private string? GetUnixPermissions(string path)
+    {
+        try
+        {
+            // On Unix-like systems, get file permissions using stat command
+            if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+            {
+                return GetUnixPermissionsViaStat(path);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error getting Unix permissions for: {Path}", path);
+        }
+        return null;
+    }
+
+    private string? GetUnixPermissionsViaStat(string path)
+    {
+        try
+        {
+            var processStartInfo = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "stat",
+                Arguments = $"-c %a \"{path}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = System.Diagnostics.Process.Start(processStartInfo);
+            if (process == null)
+                return null;
+
+            process.WaitForExit(1000); // 1 second timeout
+
+            if (process.ExitCode == 0)
+            {
+                var output = process.StandardOutput.ReadToEnd().Trim();
+                // stat returns 4 digits sometimes (e.g., "0755"), we want 3 digits
+                if (output.Length >= 3)
+                {
+                    return output.Substring(output.Length - 3);
+                }
+                return output;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error getting Unix permissions via stat for: {Path}", path);
+        }
+        return null;
+    }
+
+    private class FileSystemComparisonResult
+    {
+        public List<FileSystemItem> NewItems { get; set; } = new();
+        public List<FileSystemItem> EditedItems { get; set; } = new();
+        public List<FileSystemItem> DeletedItems { get; set; } = new();
+
+        
+    }
+
+    private FileSystemComparisonResult CompareFileSystemItems(
+        List<FileSystemItem> sourceItems,
+        List<FileSystemItem> destinationItems,
+        string sourceBasePath,
+        string destinationBasePath)
+    {
+        var result = new FileSystemComparisonResult();
+
+        // Normalize base paths for comparison
+        var normalizedSourceBase = NormalizePath(sourceBasePath);
+        var normalizedDestBase = NormalizePath(destinationBasePath);
+
+        // Check if source and destination are the same (case-insensitive on Windows)
+        var comparison = OperatingSystem.IsWindows() 
+            ? StringComparison.OrdinalIgnoreCase 
+            : StringComparison.Ordinal;
+        
+        if (normalizedSourceBase.Equals(normalizedDestBase, comparison))
+        {
+            _logger.LogWarning("Source and destination paths are the same: {Path}. Skipping backup comparison.", normalizedSourceBase);
+            return result; // Return empty result - nothing to copy or delete
+        }
+
+        // Create dictionaries for quick lookup by relative path
+        // Use case-insensitive comparison on Windows
+        var pathComparer = OperatingSystem.IsWindows() 
+            ? StringComparer.OrdinalIgnoreCase 
+            : StringComparer.Ordinal;
+        var sourceFilesByRelativePath = new Dictionary<string, FileSystemItem>(pathComparer);
+        var destinationFilesByRelativePath = new Dictionary<string, FileSystemItem>(pathComparer);
+
+
+        result.NewItems = sourceItems.Where(s => !destinationItems.Any(d => d.Name == s.Name)).ToList();
+        result.DeletedItems = destinationItems.Where(d => !sourceItems.Any(s => s.Name == d.Name)).ToList();
+        result.EditedItems = sourceItems.Where(s => destinationItems.Any(d => d.Name == s.Name && d.Size != s.Size)).ToList();
+
+        //dest   "1476 Lisa Manuel - O Raptor da Meia-Noite (Julia Hist 1476).doc"
+        //source "1476 Lisa Manuel - O Raptor da Meia-Noite (Julia Hist 1476).doc"
+
+
+        return result;
+    }
+
+    private string NormalizePath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return string.Empty;
+
+        // Normalize path separators and remove trailing separators
+        var normalized = path.Replace('\\', '/').TrimEnd('/');
+        
+        // On Windows, preserve drive letter format (C:)
+        if (OperatingSystem.IsWindows() && normalized.Length >= 2 && normalized[1] == ':')
+        {
+            normalized = normalized.Replace('/', '\\');
+        }
+
+        return normalized;
+    }
+
+    private string GetRelativePath(string fullPath, string basePath)
+    {
+        if (string.IsNullOrWhiteSpace(fullPath) || string.IsNullOrWhiteSpace(basePath))
+            return string.Empty;
+
+        var normalizedFull = NormalizePath(fullPath);
+        var normalizedBase = NormalizePath(basePath);
+
+        // Handle case-insensitive comparison on Windows
+        var comparison = OperatingSystem.IsWindows() 
+            ? StringComparison.OrdinalIgnoreCase 
+            : StringComparison.Ordinal;
+
+        if (!normalizedFull.StartsWith(normalizedBase, comparison))
+        {
+            // Path is not under base path - return just the filename
+            return Path.GetFileName(normalizedFull);
+        }
+
+        // Extract relative path
+        var relativePath = normalizedFull.Substring(normalizedBase.Length).TrimStart('/', '\\');
+        
+        // Normalize path separators to forward slashes for consistency
+        return relativePath.Replace('\\', '/');
+    }
+
+    private Task DeleteFilesFromDestination(List<FileSystemItem> itemsToDelete, string destinationBasePath)
+    {
+        if (itemsToDelete.Count == 0)
+        {
+            _logger.LogInformation("No files to delete from destination");
+            return Task.CompletedTask;
+        }
+
+        _logger.LogInformation("Deleting {Count} files from destination", itemsToDelete.Count);
+
+        int deletedCount = 0;
+        int errorCount = 0;
+
+        foreach (var item in itemsToDelete)
+        {
+            try
+            {
+                if (System.IO.File.Exists(item.Path))
+                {
+                    System.IO.File.Delete(item.Path);
+                    deletedCount++;
+                    _logger.LogDebug("Deleted file: {Path}", item.Path);
+                }
+                else
+                {
+                    _logger.LogWarning("File does not exist, skipping deletion: {Path}", item.Path);
+                }
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                errorCount++;
+                _logger.LogWarning(ex, "Access denied when deleting file: {Path}", item.Path);
+            }
+            catch (Exception ex)
+            {
+                errorCount++;
+                _logger.LogError(ex, "Error deleting file: {Path}", item.Path);
+            }
+        }
+
+        _logger.LogInformation("Deletion complete: {DeletedCount} deleted, {ErrorCount} errors", deletedCount, errorCount);
+        return Task.CompletedTask;
+    }
+
+    private async Task CopyFilesFromSource(
+        List<FileSystemItem> itemsToCopy,
+        Agent agent,
+        string sourceBasePath,
+        string destinationBasePath)
+    {
+        if (itemsToCopy.Count == 0)
+        {
+            _logger.LogInformation("No files to copy from source");
+            return;
+        }
+
+        _logger.LogInformation("Copying {Count} files from source to destination", itemsToCopy.Count);
+
+        int copiedCount = 0;
+        int errorCount = 0;
+
+        foreach (var sourceItem in itemsToCopy)
+        {
+            try
+            {
+                // Calculate destination path
+                var relativePath = GetRelativePath(sourceItem.Path, NormalizePath(sourceBasePath));
+                var destinationPath = Path.Combine(destinationBasePath, relativePath.Replace('/', Path.DirectorySeparatorChar));
+
+                // Ensure destination directory exists
+                var destinationDir = Path.GetDirectoryName(destinationPath);
+                if (!string.IsNullOrEmpty(destinationDir) && !Directory.Exists(destinationDir))
+                {
+                    Directory.CreateDirectory(destinationDir);
+                    _logger.LogDebug("Created destination directory: {Path}", destinationDir);
+                }
+
+                // Download file from agent
+                await DownloadAndSaveFile(agent, sourceItem.Path, destinationPath);
+
+                copiedCount++;
+                _logger.LogDebug("Copied file: {SourcePath} -> {DestinationPath}", sourceItem.Path, destinationPath);
+            }
+            catch (Exception ex)
+            {
+                errorCount++;
+                _logger.LogError(ex, "Error copying file: {Path}", sourceItem.Path);
+            }
+        }
+
+        _logger.LogInformation("Copy complete: {CopiedCount} copied, {ErrorCount} errors", copiedCount, errorCount);
+    }
+
+    private async Task DownloadAndSaveFile(Agent agent, string sourceFilePath, string destinationFilePath)
+    {
+        // Determine base URL
+        string baseUrl;
+        var hostname = agent.hostname;
+
+        if (hostname.StartsWith("http://"))
+        {
+            baseUrl = hostname;
+            hostname = hostname.Substring(7);
+        }
+        else if (hostname.StartsWith("https://"))
+        {
+            baseUrl = hostname;
+            hostname = hostname.Substring(8);
+        }
+        else
+        {
+            // Try HTTPS first, then HTTP as fallback
+            string[] protocolsToTry = new[] { "https://", "http://" };
+            foreach (var protocol in protocolsToTry)
+            {
+                var testUrl = $"{protocol}{hostname}/Download?filePath={Uri.EscapeDataString(sourceFilePath)}";
+                var result = await TryDownloadFileAsync(testUrl, agent.token!, destinationFilePath);
+                if (result.Success)
+                {
+                    return;
+                }
+            }
+            throw new HttpRequestException($"Failed to connect to agent at {agent.hostname} to download file");
+        }
+
+        var downloadUrl = $"{baseUrl}/Download?filePath={Uri.EscapeDataString(sourceFilePath)}";
+        var response = await TryDownloadFileAsync(downloadUrl, agent.token!, destinationFilePath);
+
+        if (!response.Success)
+        {
+            throw new HttpRequestException($"Failed to download file: {response.ErrorMessage}");
+        }
+    }
+
+    private async Task<(bool Success, string ErrorMessage)> TryDownloadFileAsync(string url, string agentToken, string destinationPath)
+    {
+        // Configure HttpClient to accept self-signed certificates in development
+        var httpClientHandler = new HttpClientHandler();
+
+        if (_environment.IsDevelopment())
+        {
+            httpClientHandler.ServerCertificateCustomValidationCallback =
+                (HttpRequestMessage message, X509Certificate2? certificate, X509Chain? chain, System.Net.Security.SslPolicyErrors sslPolicyErrors) =>
+                {
+                    return true;
+                };
+        }
+
+        using var httpClient = new HttpClient(httpClientHandler);
+        httpClient.Timeout = TimeSpan.FromMinutes(10); // Longer timeout for file downloads
+
+        // Add the authentication token header
+        httpClient.DefaultRequestHeaders.Add("X-Agent-Token", agentToken);
+
+        try
+        {
+            _logger.LogInformation("Downloading file from: {Url}", url);
+
+            var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+
+            if (response.IsSuccessStatusCode)
+            {
+                // Ensure destination directory exists
+                var destinationDir = Path.GetDirectoryName(destinationPath);
+                if (!string.IsNullOrEmpty(destinationDir) && !Directory.Exists(destinationDir))
+                {
+                    Directory.CreateDirectory(destinationDir);
+                }
+
+                // Stream the file to disk
+                using (var fileStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                using (var httpStream = await response.Content.ReadAsStreamAsync())
+                {
+                    await httpStream.CopyToAsync(fileStream);
+                }
+
+                _logger.LogInformation("Successfully downloaded and saved file: {DestinationPath}", destinationPath);
+                return (true, string.Empty);
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("Authentication failed at {Url}: {StatusCode}, {Error}",
+                    url, response.StatusCode, errorContent);
+                return (false, "Authentication failed: Invalid or expired token");
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("Failed to download file from {Url}: {StatusCode}, {Error}",
+                    url, response.StatusCode, errorContent);
+                return (false, $"HTTP {response.StatusCode}: {errorContent}");
+            }
+        }
+        catch (TaskCanceledException ex)
+        {
+            _logger.LogError(ex, "Timeout downloading file from {Url}", url);
+            return (false, "Request timeout");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error downloading file from {Url}", url);
+            return (false, ex.Message);
         }
     }
 }
