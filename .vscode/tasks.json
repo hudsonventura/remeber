@@ -2,73 +2,23 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "build",
-      "command": "dotnet",
-      "type": "process",
-      "args": [
-        "build",
-        "${workspaceFolder}/src/server/server.csproj",
-        "/property:GenerateFullPaths=true",
-        "/consoleloggerparameters:NoSummary"
-      ],
-      "problemMatcher": "$msCompile"
+      "type": "dotrush.task",
+      "project": "${command:dotrush.activeProjectPath}",
+      "problemMatcher": [],
+      "label": "dotnet: build"
     },
     {
-      "label": "publish",
-      "command": "dotnet",
-      "type": "process",
-      "args": [
-        "publish",
-        "${workspaceFolder}/src/server/server.csproj",
-        "/property:GenerateFullPaths=true",
-        "/consoleloggerparameters:NoSummary"
-      ],
-      "problemMatcher": "$msCompile"
+      "label": "docker compose up",
+      "type": "shell",
+      "command": "docker compose up postgres -d",
+      "problemMatcher": [],
+      "dependsOn": "dotnet: build"
     },
-    {
-      "label": "watch",
-      "command": "dotnet",
-      "type": "process",
-      "args": [
-        "watch",
-        "run",
-        "--project",
-        "${workspaceFolder}/src/server/server.csproj"
-      ],
-      "problemMatcher": "$msCompile"
-    },
-    {
-      "label": "clean",
-      "command": "dotnet",
-      "type": "process",
-      "args": [
-        "clean",
-        "${workspaceFolder}/src/server/server.csproj",
-        "/property:GenerateFullPaths=true",
-        "/consoleloggerparameters:NoSummary"
-      ],
-      "problemMatcher": "$msCompile"
-    },
-    {
-			"label": "docker compose up postgres",
-			"type": "shell",
-			"command": "docker compose up postgres -d", //docker compose up db cache -d && dotnet build
-			"problemMatcher": []
-		},
     {
       "label": "docker compose: down",
       "type": "shell",
-			"command": "docker compose down", //docker compose up db cache -d && dotnet build
-			"problemMatcher": []
-    },
-    {
-      "label": "build and start postgres",
-      "dependsOn": [
-        "build",
-        "docker compose: up"
-      ],
-      "dependsOrder": "sequence",
-      "problemMatcher": "$msCompile"
+      "command": "docker compose down",
+      "problemMatcher": []
     }
   ]
 }

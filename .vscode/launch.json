@@ -2,31 +2,42 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": ".NET Core Launch (web)",
+      "name": "Server",
       "type": "coreclr",
       "request": "launch",
-      "preLaunchTask": "docker compose up postgres",
+      "preLaunchTask": "docker compose up",
       "postDebugTask": "docker compose: down",
-      "program": "${workspaceFolder}/src/server/bin/Debug/net9.0/server.dll",
+      "program": "${command:dotrush.activeTargetPath}",
       "args": [],
-      "cwd": "${workspaceFolder}/src/server",
+      "cwd": "${workspaceFolder}/src/server/",
       "stopAtEntry": false,
       "serverReadyAction": {
-        "action": "openExternally",
-        "pattern": "\\bNow listening on:\\s+(https?://\\S+)",
-        "uriFormat": "%s/scalar/v1"
+         "action": "openExternally",
+         "pattern": "\\bNow listening on:\\s+(https?://\\S+)",
+         "uriFormat": "%s/scalar/v1"
       },
       "env": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+          "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "sourceFileMap": {
+          "/Views": "${workspaceFolder}/Views"
+      }
+    },
+    {
+      "name": "Agent Linux",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/agents/linux/bin/Debug/net9.0/agent.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/src/agents/linux",
+      "stopAtEntry": false,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "https://localhost:5002"
       },
       "sourceFileMap": {
         "/Views": "${workspaceFolder}/Views"
       }
-    },
-    {
-      "name": ".NET Core Attach",
-      "type": "coreclr",
-      "request": "attach"
     }
   ]
 }
