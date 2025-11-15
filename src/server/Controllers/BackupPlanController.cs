@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using server.Data;
 using server.Models;
+using server.HostedServices;
 
 namespace server.Controllers;
 
@@ -244,6 +245,93 @@ public class BackupPlanController : ControllerBase
         {
             _logger.LogError(ex, "Error deleting backup plan {BackupPlanId}", id);
             return StatusCode(500, new { message = "An error occurred while deleting the backup plan" });
+        }
+    }
+
+    [HttpPost("/api/backupplan/{id}/simulate")]
+    [ProducesResponseType(typeof(SimulationResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> SimulateBackupPlan(Guid id)
+    {
+        try
+        {
+            var backupPlan = await _context.BackupPlans
+                .Include(bp => bp.agent)
+                .FirstOrDefaultAsync(bp => bp.id == id);
+
+            if (backupPlan == null)
+            {
+                return NotFound(new { message = "Backup plan not found" });
+            }
+
+            if (backupPlan.agent == null)
+            {
+                return BadRequest(new { message = "Backup plan does not have an associated agent" });
+            }
+
+            var executor = HttpContext.RequestServices.GetRequiredService<BackupPlanExecutor>();
+            var simulationResult = await executor.SimulateBackupPlanAsync(backupPlan, backupPlan.agent);
+
+            return Ok(simulationResult);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error simulating backup plan {BackupPlanId}", id);
+            return StatusCode(500, new { message = "An error occurred while simulating the backup plan", error = ex.Message });
+        }
+    }
+
+    [HttpPost("/api/backupplan/{id}/execute")]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ExecuteBackupPlan(Guid id)
+    {
+        try
+        {
+            var backupPlan = await _context.BackupPlans
+                .Include(bp => bp.agent)
+                .FirstOrDefaultAsync(bp => bp.id == id);
+
+            if (backupPlan == null)
+            {
+                return NotFound(new { message = "Backup plan not found" });
+            }
+
+            if (backupPlan.agent == null)
+            {
+                return BadRequest(new { message = "Backup plan does not have an associated agent" });
+            }
+
+            // Check if agent has a token
+            if (string.IsNullOrEmpty(backupPlan.agent.token))
+            {
+                return BadRequest(new { message = "Agent is not authenticated. Please pair the agent first." });
+            }
+
+            var executor = HttpContext.RequestServices.GetRequiredService<BackupPlanExecutor>();
+            
+            // Execute asynchronously in the background
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await executor.ExecuteBackupPlanAsync(backupPlan, backupPlan.agent);
+                    _logger.LogInformation("Manual execution of backup plan {BackupPlanId} completed successfully", id);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error during manual execution of backup plan {BackupPlanId}", id);
+                }
+            });
+
+            return Accepted(new { message = "Backup plan execution started" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error starting backup plan execution {BackupPlanId}", id);
+            return StatusCode(500, new { message = "An error occurred while starting the backup plan execution", error = ex.Message });
         }
     }
 }

@@ -693,4 +693,127 @@ public class BackupPlanExecutor
             return (false, ex.Message);
         }
     }
+
+    public async Task<SimulationResult> SimulateBackupPlanAsync(BackupPlan backupPlan, Agent agent)
+    {
+        try
+        {
+            using var scope = _serviceScopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<DBContext>();
+
+            _logger.LogInformation("Simulating backup plan {BackupPlanId} for agent {AgentHostname}", backupPlan.id, agent.hostname);
+
+            // Reload agent from database to ensure we have the latest token
+            var agentFromDb = await dbContext.Agents.FindAsync(agent.id);
+            if (agentFromDb == null)
+            {
+                _logger.LogError("Agent {AgentId} not found in database", agent.id);
+                throw new InvalidOperationException($"Agent {agent.id} not found");
+            }
+
+            // Check if agent has a token
+            if (string.IsNullOrEmpty(agentFromDb.token))
+            {
+                _logger.LogError("Agent {AgentHostname} does not have a token. Cannot simulate backup plan {BackupPlanId}",
+                    agentFromDb.hostname, backupPlan.id);
+                throw new InvalidOperationException($"Agent {agentFromDb.hostname} is not authenticated. Please pair the agent first.");
+            }
+
+            // Call the /Look endpoint to get file system items from source (remote agent)
+            var sourceFileSystemItems = await CallLookEndpointAsync(agentFromDb, backupPlan.source);
+
+            _logger.LogInformation("Retrieved {Count} file system items from agent {AgentHostname} for path {Source}",
+                sourceFileSystemItems.Count, agentFromDb.hostname, backupPlan.source);
+
+            // Get file system items from local destination
+            var destinationFileSystemItems = GetLocalFileSystemItems(backupPlan.destination);
+
+            _logger.LogInformation("Retrieved {Count} file system items from local destination {Destination}",
+                destinationFileSystemItems.Count, backupPlan.destination);
+
+            // Compare source and destination to determine what to copy and delete
+            var comparisonResult = CompareFileSystemItems(
+                sourceFileSystemItems,
+                destinationFileSystemItems,
+                backupPlan.source,
+                backupPlan.destination);
+
+            // Build simulation result
+            var simulationResult = new SimulationResult();
+            var allItems = new List<SimulationItem>();
+
+            // Process new items (to be copied)
+            foreach (var item in comparisonResult.NewItems)
+            {
+                if (item.Type == "file") // Only show files, not directories
+                {
+                    allItems.Add(new SimulationItem
+                    {
+                        FileName = item.Name,
+                        FilePath = item.Path,
+                        Size = item.Size,
+                        Action = "Copy",
+                        Reason = "Does not exist on destination"
+                    });
+                }
+            }
+
+            // Process edited items (to be copied)
+            foreach (var item in comparisonResult.EditedItems)
+            {
+                if (item.Type == "file") // Only show files, not directories
+                {
+                    var destItem = destinationFileSystemItems.FirstOrDefault(d => d.Name == item.Name);
+                    allItems.Add(new SimulationItem
+                    {
+                        FileName = item.Name,
+                        FilePath = item.Path,
+                        Size = item.Size,
+                        Action = "Copy",
+                        Reason = $"Changed on source (size: {destItem?.Size ?? 0} -> {item.Size})"
+                    });
+                }
+            }
+
+            // Process deleted items (to be deleted)
+            foreach (var item in comparisonResult.DeletedItems)
+            {
+                if (item.Type == "file") // Only show files, not directories
+                {
+                    allItems.Add(new SimulationItem
+                    {
+                        FileName = item.Name,
+                        FilePath = item.Path,
+                        Size = item.Size,
+                        Action = "Delete",
+                        Reason = "Does not exist on source"
+                    });
+                }
+            }
+
+            // Sort by action (Copy first, then Delete), then by filename
+            allItems = allItems
+                .OrderBy(i => i.Action == "Delete") // Copy items first (false < true)
+                .ThenBy(i => i.FileName)
+                .ToList();
+
+            simulationResult.Items = allItems;
+            simulationResult.TotalItems = allItems.Count;
+            simulationResult.ItemsToCopy = allItems.Count(i => i.Action == "Copy");
+            simulationResult.ItemsToDelete = allItems.Count(i => i.Action == "Delete");
+
+            _logger.LogInformation(
+                "Simulation complete: {TotalCount} items, {CopyCount} to copy, {DeleteCount} to delete",
+                simulationResult.TotalItems,
+                simulationResult.ItemsToCopy,
+                simulationResult.ItemsToDelete);
+
+            return simulationResult;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error simulating backup plan {BackupPlanId}", backupPlan.id);
+            throw;
+        }
+    }
 }

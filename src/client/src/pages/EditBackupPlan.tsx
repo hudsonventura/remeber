@@ -3,11 +3,12 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, Trash2, FolderOpen } from "lucide-react"
-import { apiGet, apiPut, apiDelete } from "@/lib/api"
+import { ArrowLeft, Trash2, FolderOpen, Play, Zap } from "lucide-react"
+import { apiGet, apiPut, apiDelete, apiPost } from "@/lib/api"
 import { FileBrowser } from "@/components/FileBrowser"
 import { ServerFileBrowser } from "@/components/ServerFileBrowser"
 import { CronDescription } from "@/components/CronDescription"
+import { SimulationResults } from "@/components/SimulationResults"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,6 +55,11 @@ export function EditBackupPlan() {
   const [error, setError] = useState<string | null>(null)
   const [showFileBrowser, setShowFileBrowser] = useState(false)
   const [showServerFileBrowser, setShowServerFileBrowser] = useState(false)
+  const [showSimulation, setShowSimulation] = useState(false)
+  const [simulationResult, setSimulationResult] = useState<any>(null)
+  const [isSimulating, setIsSimulating] = useState(false)
+  const [isExecuting, setIsExecuting] = useState(false)
+  const [executionMessage, setExecutionMessage] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -178,6 +184,72 @@ export function EditBackupPlan() {
     return "/backup-plans"
   }
 
+  const handleSimulate = async () => {
+    if (!planId) {
+      setError("Backup plan ID is required")
+      return
+    }
+
+    setIsSimulating(true)
+    setError(null)
+    setSimulationResult(null)
+
+    try {
+      const token = sessionStorage.getItem("token")
+      if (!token) {
+        navigate("/login")
+        return
+      }
+
+      const result = await apiPost(`/api/backupplan/${planId}/simulate`, {})
+      setSimulationResult(result)
+      setShowSimulation(true)
+    } catch (err) {
+      if (err instanceof TypeError && err.message === "Failed to fetch") {
+        setError("Unable to connect to the server. Please make sure the backend is running.")
+      } else {
+        setError(err instanceof Error ? err.message : "An error occurred while simulating the backup plan")
+      }
+    } finally {
+      setIsSimulating(false)
+    }
+  }
+
+  const handleExecute = async () => {
+    if (!planId) {
+      setError("Backup plan ID is required")
+      return
+    }
+
+    setIsExecuting(true)
+    setError(null)
+    setExecutionMessage(null)
+
+    try {
+      const token = sessionStorage.getItem("token")
+      if (!token) {
+        navigate("/login")
+        return
+      }
+
+      await apiPost(`/api/backupplan/${planId}/execute`, {})
+      setExecutionMessage("Backup plan execution started. The backup will run in the background.")
+      
+      // Clear the message after 5 seconds
+      setTimeout(() => {
+        setExecutionMessage(null)
+      }, 5000)
+    } catch (err) {
+      if (err instanceof TypeError && err.message === "Failed to fetch") {
+        setError("Unable to connect to the server. Please make sure the backend is running.")
+      } else {
+        setError(err instanceof Error ? err.message : "An error occurred while executing the backup plan")
+      }
+    } finally {
+      setIsExecuting(false)
+    }
+  }
+
   if (isLoadingData) {
     return (
       <div className="space-y-6">
@@ -216,6 +288,12 @@ export function EditBackupPlan() {
       {error && (
         <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
           {error}
+        </div>
+      )}
+
+      {executionMessage && (
+        <div className="rounded-md bg-green-500/15 p-3 text-sm text-green-600 dark:text-green-400">
+          {executionMessage}
         </div>
       )}
 
@@ -341,6 +419,24 @@ export function EditBackupPlan() {
           </div>
 
               <div className="flex gap-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleSimulate}
+                  disabled={isLoading || isSimulating || isExecuting}
+                >
+                  <Play className="h-4 w-4 mr-2" />
+                  {isSimulating ? "Simulating..." : "Simulate"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleExecute}
+                  disabled={isLoading || isSimulating || isExecuting}
+                >
+                  <Zap className="h-4 w-4 mr-2" />
+                  {isExecuting ? "Starting..." : "Execute Now"}
+                </Button>
                 <Button type="submit" disabled={isLoading}>
                   {isLoading ? "Saving..." : "Save Changes"}
                 </Button>
@@ -406,6 +502,13 @@ export function EditBackupPlan() {
           setDestination(path)
           setShowServerFileBrowser(false)
         }}
+      />
+
+      <SimulationResults
+        open={showSimulation}
+        onClose={() => setShowSimulation(false)}
+        result={simulationResult}
+        isLoading={isSimulating}
       />
     </div>
   )
