@@ -3,7 +3,7 @@
  * Update the API_URL here to change the backend endpoint
  */
 
-// Default to HTTPS for production, but allow override via environment variable
+// Default to HTTP for development, but allow override via environment variable
 export const API_URL = import.meta.env.VITE_API_URL || "https://localhost:5001"
 
 /**
