@@ -2,23 +2,13 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "type": "dotrush.task",
-      "project": "${command:dotrush.activeProjectPath}",
-      "problemMatcher": [],
+      "type": "shell",
+      "problemMatcher": [], 
+      "command": "dotnet build --configuration Debug",
+      "options": {
+        "cwd": "${workspaceFolder}/src/server"
+      },
       "label": "dotnet: build"
-    },
-    {
-      "label": "docker compose up",
-      "type": "shell",
-      "command": "docker compose up postgres -d",
-      "problemMatcher": [],
-      "dependsOn": "client: dev"
-    },
-    {
-      "label": "docker compose: down",
-      "type": "shell",
-      "command": "docker compose down",
-      "problemMatcher": []
     },
     {
       "label": "client: dev",

@@ -13,3 +13,7 @@ src/agents/linux/bin/*
 .env
 .env.local
 .env.*.local
+docker-compose.yml
+src/server/remember.db
+src/server/remember.db-shm
+src/server/remember.db-wal

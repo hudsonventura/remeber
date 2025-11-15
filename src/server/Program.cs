@@ -1,10 +1,12 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 using server.Data;
 using server.HostedServices;
+using server.Logging;
 using server.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -35,12 +37,12 @@ builder.Services.AddCors(options =>
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
-// Configure Entity Framework Core with PostgreSQL
+// Configure Entity Framework Core with SQLite
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
 builder.Services.AddDbContext<DBContext>(options =>
-    options.UseNpgsql(connectionString));
+    options.UseSqlite(connectionString));
 
 // Configure JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("Jwt");
@@ -66,6 +68,11 @@ builder.Services.AddAuthentication(options =>
 });
 
 builder.Services.AddAuthorization();
+
+// Register custom logger provider
+// Clear default providers and add custom logger
+builder.Logging.ClearProviders();
+builder.Logging.AddProvider(new CustomLoggerProvider());
 
 // Register application services
 builder.Services.AddScoped<IAuthService, AuthService>();

@@ -5,8 +5,6 @@
       "name": "Server",
       "type": "coreclr",
       "request": "launch",
-      "preLaunchTask": "docker compose up",
-      "postDebugTask": "docker compose: down",
       "program": "${command:dotrush.activeTargetPath}",
       "args": [],
       "cwd": "${workspaceFolder}/src/server/",

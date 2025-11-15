@@ -27,7 +27,7 @@ public class DBContext : DbContext
         if (!optionsBuilder.IsConfigured && _configuration != null)
         {
             var connectionString = _configuration.GetConnectionString("DefaultConnection");
-            optionsBuilder.UseNpgsql(connectionString);
+            optionsBuilder.UseSqlite(connectionString);
             _logger?.LogInformation("Connection string configured from IConfiguration");
         }
     }
