@@ -428,15 +428,36 @@ export function EditBackupPlan() {
                   <Play className="h-4 w-4 mr-2" />
                   {isSimulating ? "Simulating..." : "Simulate"}
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleExecute}
-                  disabled={isLoading || isSimulating || isExecuting}
-                >
-                  <Zap className="h-4 w-4 mr-2" />
-                  {isExecuting ? "Starting..." : "Execute Now"}
-                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={isLoading || isSimulating || isExecuting}
+                    >
+                      <Zap className="h-4 w-4 mr-2" />
+                      Execute Now
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Execute Backup Plan</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Are you sure you want to execute the backup plan <strong>{name}</strong> now?
+                        This will start the backup process immediately.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={handleExecute}
+                        className="bg-primary text-primary-foreground hover:bg-primary/90"
+                      >
+                        Execute
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
                 <Button type="submit" disabled={isLoading}>
                   {isLoading ? "Saving..." : "Save Changes"}
                 </Button>

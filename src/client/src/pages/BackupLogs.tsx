@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { ArrowLeft, ChevronLeft, ChevronRight, X, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
 import { apiGet } from "@/lib/api"
 
 interface LogEntry {
@@ -63,6 +65,20 @@ export function BackupLogs() {
   const [pageSize] = useState(100)
   const [totalPages, setTotalPages] = useState(1)
   const [totalCount, setTotalCount] = useState(0)
+  
+  // Filters
+  const [filters, setFilters] = useState({
+    action: "All",
+    fileName: "",
+    minSize: "",
+    maxSize: "",
+    fromDate: "",
+    toDate: "",
+  })
+  
+  // Sorting
+  const [sortBy, setSortBy] = useState("datetime")
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
 
   useEffect(() => {
     const fetchData = async () => {
@@ -90,9 +106,39 @@ export function BackupLogs() {
           // If plan fetch fails, continue without name
         }
 
+        // Build query parameters
+        const params = new URLSearchParams({
+          page: page.toString(),
+          pageSize: pageSize.toString(),
+          sortBy: sortBy,
+          sortOrder: sortOrder,
+        })
+        
+        if (filters.action && filters.action !== "All") {
+          params.append("action", filters.action)
+        }
+        if (filters.fileName) {
+          params.append("fileName", filters.fileName)
+        }
+        if (filters.minSize) {
+          params.append("minSize", filters.minSize)
+        }
+        if (filters.maxSize) {
+          params.append("maxSize", filters.maxSize)
+        }
+        if (filters.fromDate) {
+          params.append("fromDate", new Date(filters.fromDate).toISOString())
+        }
+        if (filters.toDate) {
+          // Add time to end of day
+          const toDate = new Date(filters.toDate)
+          toDate.setHours(23, 59, 59, 999)
+          params.append("toDate", toDate.toISOString())
+        }
+
         // Fetch logs
         const logsData: LogsResponse = await apiGet<LogsResponse>(
-          `/api/backupplan/${planId}/logs?page=${page}&pageSize=${pageSize}`
+          `/api/backupplan/${planId}/logs?${params.toString()}`
         )
         setLogs(logsData.logs)
         setTotalPages(logsData.totalPages)
@@ -109,7 +155,50 @@ export function BackupLogs() {
     }
 
     fetchData()
-  }, [planId, page, pageSize, navigate])
+  }, [planId, page, filters, sortBy, sortOrder, pageSize, navigate])
+  
+  const handleFilterChange = (key: string, value: string) => {
+    setFilters(prev => ({ ...prev, [key]: value }))
+    setPage(1) // Reset to first page when filter changes
+  }
+  
+  const clearFilters = () => {
+    setFilters({
+      action: "All",
+      fileName: "",
+      minSize: "",
+      maxSize: "",
+      fromDate: "",
+      toDate: "",
+    })
+    setPage(1)
+  }
+  
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc")
+    } else {
+      setSortBy(column)
+      setSortOrder("asc")
+    }
+    setPage(1)
+  }
+  
+  const getSortIcon = (column: string) => {
+    if (sortBy !== column) {
+      return <ArrowUpDown className="h-3 w-3 ml-1 inline" />
+    }
+    return sortOrder === "asc" 
+      ? <ArrowUp className="h-3 w-3 ml-1 inline" />
+      : <ArrowDown className="h-3 w-3 ml-1 inline" />
+  }
+  
+  const hasActiveFilters = filters.action !== "All" || 
+    filters.fileName !== "" || 
+    filters.minSize !== "" || 
+    filters.maxSize !== "" || 
+    filters.fromDate !== "" || 
+    filters.toDate !== ""
 
   const getActionColor = (action: string) => {
     switch (action) {
@@ -167,12 +256,149 @@ export function BackupLogs() {
 
       {!error && (
         <>
+          {/* Filters Section */}
+          <div className="rounded-lg border bg-card p-4 shadow-sm">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold">Filters</h2>
+                {hasActiveFilters && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={clearFilters}
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Clear Filters
+                  </Button>
+                )}
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Action Filter */}
+                <div className="space-y-2">
+                  <Label htmlFor="filter-action">Action</Label>
+                  <select
+                    id="filter-action"
+                    value={filters.action}
+                    onChange={(e) => handleFilterChange("action", e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <option value="All">All</option>
+                    <option value="Copy">Copy</option>
+                    <option value="Delete">Delete</option>
+                    <option value="Ignored">Ignored</option>
+                  </select>
+                </div>
+                
+                {/* Filename Filter */}
+                <div className="space-y-2">
+                  <Label htmlFor="filter-filename">File Name</Label>
+                  <Input
+                    id="filter-filename"
+                    type="text"
+                    placeholder="Search filename..."
+                    value={filters.fileName}
+                    onChange={(e) => handleFilterChange("fileName", e.target.value)}
+                  />
+                </div>
+                
+                {/* Min Size Filter */}
+                <div className="space-y-2">
+                  <Label htmlFor="filter-minsize">Min Size (bytes)</Label>
+                  <Input
+                    id="filter-minsize"
+                    type="number"
+                    placeholder="0"
+                    value={filters.minSize}
+                    onChange={(e) => handleFilterChange("minSize", e.target.value)}
+                    min="0"
+                  />
+                </div>
+                
+                {/* Max Size Filter */}
+                <div className="space-y-2">
+                  <Label htmlFor="filter-maxsize">Max Size (bytes)</Label>
+                  <Input
+                    id="filter-maxsize"
+                    type="number"
+                    placeholder="No limit"
+                    value={filters.maxSize}
+                    onChange={(e) => handleFilterChange("maxSize", e.target.value)}
+                    min="0"
+                  />
+                </div>
+                
+                {/* From Date Filter */}
+                <div className="space-y-2">
+                  <Label htmlFor="filter-fromdate">From Date</Label>
+                  <Input
+                    id="filter-fromdate"
+                    type="date"
+                    value={filters.fromDate}
+                    onChange={(e) => handleFilterChange("fromDate", e.target.value)}
+                  />
+                </div>
+                
+                {/* To Date Filter */}
+                <div className="space-y-2">
+                  <Label htmlFor="filter-todate">To Date</Label>
+                  <Input
+                    id="filter-todate"
+                    type="date"
+                    value={filters.toDate}
+                    onChange={(e) => handleFilterChange("toDate", e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Sort Section */}
           <div className="rounded-lg border bg-card p-4 shadow-sm">
             <div className="flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">
-                Total entries: <span className="font-medium text-foreground">{totalCount}</span>
-              </p>
+              <div className="flex items-center gap-4">
+                <Label htmlFor="sort-by">Sort By:</Label>
+                <select
+                  id="sort-by"
+                  value={sortBy}
+                  onChange={(e) => {
+                    setSortBy(e.target.value)
+                    setPage(1)
+                  }}
+                  className="rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                >
+                  <option value="datetime">Date/Time</option>
+                  <option value="filename">File Name</option>
+                  <option value="size">Size</option>
+                  <option value="action">Action</option>
+                </select>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSortOrder(sortOrder === "asc" ? "desc" : "asc")
+                    setPage(1)
+                  }}
+                >
+                  {sortOrder === "asc" ? (
+                    <>
+                      <ArrowUp className="h-4 w-4 mr-2" />
+                      Ascending
+                    </>
+                  ) : (
+                    <>
+                      <ArrowDown className="h-4 w-4 mr-2" />
+                      Descending
+                    </>
+                  )}
+                </Button>
+              </div>
+              
               <div className="flex items-center gap-2">
+                <p className="text-sm text-muted-foreground">
+                  Total entries: <span className="font-medium text-foreground">{totalCount}</span>
+                </p>
                 <Button
                   variant="outline"
                   size="sm"
@@ -210,10 +436,30 @@ export function BackupLogs() {
                 <table className="w-full">
                   <thead className="bg-muted">
                     <tr>
-                      <th className="text-left p-3 text-sm font-medium">Date/Time</th>
-                      <th className="text-left p-3 text-sm font-medium">File Name</th>
-                      <th className="text-left p-3 text-sm font-medium">Size</th>
-                      <th className="text-left p-3 text-sm font-medium">Action</th>
+                      <th 
+                        className="text-left p-3 text-sm font-medium cursor-pointer hover:bg-muted/80 select-none"
+                        onClick={() => handleSort("datetime")}
+                      >
+                        Date/Time{getSortIcon("datetime")}
+                      </th>
+                      <th 
+                        className="text-left p-3 text-sm font-medium cursor-pointer hover:bg-muted/80 select-none"
+                        onClick={() => handleSort("filename")}
+                      >
+                        File Name{getSortIcon("filename")}
+                      </th>
+                      <th 
+                        className="text-left p-3 text-sm font-medium cursor-pointer hover:bg-muted/80 select-none"
+                        onClick={() => handleSort("size")}
+                      >
+                        Size{getSortIcon("size")}
+                      </th>
+                      <th 
+                        className="text-left p-3 text-sm font-medium cursor-pointer hover:bg-muted/80 select-none"
+                        onClick={() => handleSort("action")}
+                      >
+                        Action{getSortIcon("action")}
+                      </th>
                       <th className="text-left p-3 text-sm font-medium">Reason</th>
                     </tr>
                   </thead>

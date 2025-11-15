@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
-import { ArrowLeft, Plus, Pencil, Trash2, FileText } from "lucide-react"
-import { apiGet, apiDelete } from "@/lib/api"
+import { ArrowLeft, Plus, Pencil, Trash2, FileText, Play, Zap } from "lucide-react"
+import { apiGet, apiDelete, apiPost } from "@/lib/api"
 import { CronDescription } from "@/components/CronDescription"
+import { SimulationResults } from "@/components/SimulationResults"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,6 +39,11 @@ export function AgentBackupPlans() {
   const [backupPlans, setBackupPlans] = useState<BackupPlan[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [simulatingPlanId, setSimulatingPlanId] = useState<string | null>(null)
+  const [executingPlanId, setExecutingPlanId] = useState<string | null>(null)
+  const [showSimulation, setShowSimulation] = useState(false)
+  const [simulationResult, setSimulationResult] = useState<any>(null)
+  const [executionMessages, setExecutionMessages] = useState<Record<string, string>>({})
 
   useEffect(() => {
     const fetchData = async () => {
@@ -99,6 +105,68 @@ export function AgentBackupPlans() {
     }
   }
 
+  const handleSimulate = async (planId: string) => {
+    setSimulatingPlanId(planId)
+    setError(null)
+    setSimulationResult(null)
+
+    try {
+      const token = sessionStorage.getItem("token")
+      if (!token) {
+        navigate("/login")
+        return
+      }
+
+      const result = await apiPost(`/api/backupplan/${planId}/simulate`, {})
+      setSimulationResult(result)
+      setShowSimulation(true)
+    } catch (err) {
+      if (err instanceof TypeError && err.message === "Failed to fetch") {
+        setError("Unable to connect to the server. Please make sure the backend is running.")
+      } else {
+        setError(err instanceof Error ? err.message : "An error occurred while simulating the backup plan")
+      }
+    } finally {
+      setSimulatingPlanId(null)
+    }
+  }
+
+  const handleExecute = async (planId: string) => {
+    setExecutingPlanId(planId)
+    setError(null)
+
+    try {
+      const token = sessionStorage.getItem("token")
+      if (!token) {
+        navigate("/login")
+        return
+      }
+
+      await apiPost(`/api/backupplan/${planId}/execute`, {})
+      setExecutionMessages(prev => ({
+        ...prev,
+        [planId]: "Backup plan execution started. The backup will run in the background."
+      }))
+      
+      // Clear the message after 5 seconds
+      setTimeout(() => {
+        setExecutionMessages(prev => {
+          const newMessages = { ...prev }
+          delete newMessages[planId]
+          return newMessages
+        })
+      }, 5000)
+    } catch (err) {
+      if (err instanceof TypeError && err.message === "Failed to fetch") {
+        setError("Unable to connect to the server. Please make sure the backend is running.")
+      } else {
+        setError(err instanceof Error ? err.message : "An error occurred while executing the backup plan")
+      }
+    } finally {
+      setExecutingPlanId(null)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -151,6 +219,12 @@ export function AgentBackupPlans() {
         </div>
       )}
 
+      {Object.entries(executionMessages).map(([planId, message]) => (
+        <div key={planId} className="rounded-md bg-green-500/15 p-3 text-sm text-green-600 dark:text-green-400">
+          {message}
+        </div>
+      ))}
+
       {!error && backupPlans.length === 0 && (
         <div className="rounded-lg border bg-card p-6 shadow-sm">
           <div className="text-center py-12">
@@ -202,29 +276,76 @@ export function AgentBackupPlans() {
                     </div>
                   </div>
                 </div>
-                <div className="flex gap-2 ml-4">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      navigate(`/backup-plans/${plan.id}/logs`)
-                    }}
-                  >
-                    <FileText className="h-4 w-4 mr-2" />
-                    Logs
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      navigate(`/agents/${agentId}/backup-plans/${plan.id}/edit`)
-                    }}
-                  >
-                    <Pencil className="h-4 w-4 mr-2" />
-                    Edit
-                  </Button>
+                <div className="flex flex-col gap-2 ml-4">
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleSimulate(plan.id)
+                      }}
+                      disabled={simulatingPlanId === plan.id || executingPlanId === plan.id}
+                    >
+                      <Play className="h-4 w-4 mr-2" />
+                      {simulatingPlanId === plan.id ? "Simulating..." : "Simulate"}
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => e.stopPropagation()}
+                          disabled={simulatingPlanId === plan.id || executingPlanId === plan.id}
+                        >
+                          <Zap className="h-4 w-4 mr-2" />
+                          Execute Now
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Execute Backup Plan</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to execute the backup plan <strong>{plan.name}</strong> now?
+                            This will start the backup process immediately.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => handleExecute(plan.id)}
+                            className="bg-primary text-primary-foreground hover:bg-primary/90"
+                          >
+                            Execute
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        navigate(`/backup-plans/${plan.id}/logs`)
+                      }}
+                    >
+                      <FileText className="h-4 w-4 mr-2" />
+                      Logs
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        navigate(`/agents/${agentId}/backup-plans/${plan.id}/edit`)
+                      }}
+                    >
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Edit
+                    </Button>
+                  </div>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button
@@ -262,6 +383,13 @@ export function AgentBackupPlans() {
           ))}
         </div>
       )}
+
+      <SimulationResults
+        open={showSimulation}
+        onClose={() => setShowSimulation(false)}
+        result={simulationResult}
+        isLoading={simulatingPlanId !== null}
+      />
     </div>
   )
 }

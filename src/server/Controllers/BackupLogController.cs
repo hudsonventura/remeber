@@ -22,7 +22,18 @@ public class BackupLogController : ControllerBase
     [HttpGet("/api/backupplan/{id}/logs")]
     [ProducesResponseType(typeof(List<LogEntryResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetBackupPlanLogs(Guid id, [FromQuery] int page = 1, [FromQuery] int pageSize = 100)
+    public async Task<IActionResult> GetBackupPlanLogs(
+        Guid id, 
+        [FromQuery] int page = 1, 
+        [FromQuery] int pageSize = 100,
+        [FromQuery] string? action = null,
+        [FromQuery] string? fileName = null,
+        [FromQuery] long? minSize = null,
+        [FromQuery] long? maxSize = null,
+        [FromQuery] DateTime? fromDate = null,
+        [FromQuery] DateTime? toDate = null,
+        [FromQuery] string? sortBy = "datetime",
+        [FromQuery] string? sortOrder = "desc")
     {
         try
         {
@@ -33,15 +44,76 @@ public class BackupLogController : ControllerBase
                 return NotFound(new { message = "Backup plan not found" });
             }
 
-            // Get total count
-            var totalCount = await _logContext.LogEntries
-                .Where(log => log.backupPlanId == id)
-                .CountAsync();
+            // Start with base query
+            var query = _logContext.LogEntries.Where(log => log.backupPlanId == id);
 
-            // Get paginated logs, ordered by datetime descending (newest first)
-            var logs = await _logContext.LogEntries
-                .Where(log => log.backupPlanId == id)
-                .OrderByDescending(log => log.datetime)
+            // Apply filters
+            if (!string.IsNullOrWhiteSpace(action) && action != "All")
+            {
+                query = query.Where(log => log.action == action);
+            }
+
+            if (!string.IsNullOrWhiteSpace(fileName))
+            {
+                // Use ToLower() for case-insensitive search (SQLite compatible)
+                var fileNameLower = fileName.ToLower();
+                query = query.Where(log => log.fileName.ToLower().Contains(fileNameLower));
+            }
+
+            if (minSize.HasValue)
+            {
+                query = query.Where(log => log.size.HasValue && log.size >= minSize.Value);
+            }
+
+            if (maxSize.HasValue)
+            {
+                query = query.Where(log => log.size.HasValue && log.size <= maxSize.Value);
+            }
+
+            if (fromDate.HasValue)
+            {
+                query = query.Where(log => log.datetime >= fromDate.Value);
+            }
+
+            if (toDate.HasValue)
+            {
+                query = query.Where(log => log.datetime <= toDate.Value);
+            }
+
+            // Get total count after filters
+            var totalCount = await query.CountAsync();
+
+            // Apply sorting
+            var sortByLower = sortBy?.ToLower() ?? "datetime";
+            var sortOrderLower = sortOrder?.ToLower() ?? "desc";
+
+            if (sortByLower == "filename")
+            {
+                query = sortOrderLower == "asc" 
+                    ? query.OrderBy(log => log.fileName)
+                    : query.OrderByDescending(log => log.fileName);
+            }
+            else if (sortByLower == "size")
+            {
+                query = sortOrderLower == "asc"
+                    ? query.OrderBy(log => log.size ?? 0)
+                    : query.OrderByDescending(log => log.size ?? 0);
+            }
+            else if (sortByLower == "action")
+            {
+                query = sortOrderLower == "asc"
+                    ? query.OrderBy(log => log.action)
+                    : query.OrderByDescending(log => log.action);
+            }
+            else // datetime (default)
+            {
+                query = sortOrderLower == "asc"
+                    ? query.OrderBy(log => log.datetime)
+                    : query.OrderByDescending(log => log.datetime);
+            }
+
+            // Get paginated logs
+            var logs = await query
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .Select(log => new LogEntryResponse
@@ -67,7 +139,7 @@ public class BackupLogController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving logs for backup plan {BackupPlanId}", id);
+            _logger.LogError(ex, "Error retrieving logs for backup plan {BackupPlanId}. Error:{error}", id, ex.Message);
             return StatusCode(500, new { message = "An error occurred while retrieving logs", error = ex.Message });
         }
     }
