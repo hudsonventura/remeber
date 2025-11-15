@@ -3,8 +3,12 @@
  * Update the API_URL here to change the backend endpoint
  */
 
-// Default to HTTP for development, but allow override via environment variable
-export const API_URL = import.meta.env.VITE_API_URL || "https://localhost:5001"
+// Get API URL from environment variable, or use relative path for same-origin requests
+// If VITE_API_URL is set, use it. Otherwise, use empty string for relative URLs (same origin)
+// This allows the app to work in different deployment scenarios
+export const API_URL = import.meta.env.VITE_API_URL || ""
+
+console.log("API_URL", API_URL)
 
 /**
  * Get the authentication token from session storage
@@ -36,7 +40,14 @@ export async function apiRequest<T = any>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = endpoint.startsWith("http") ? endpoint : `${API_URL}${endpoint}`
+  // If endpoint is already a full URL, use it as-is
+  // If API_URL is set, prepend it to the endpoint
+  // Otherwise, use the endpoint as a relative path (same origin)
+  const url = endpoint.startsWith("http") 
+    ? endpoint 
+    : API_URL 
+      ? `${API_URL}${endpoint}` 
+      : endpoint
   
   const response = await fetch(url, {
     ...options,
