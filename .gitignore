@@ -14,3 +14,6 @@ src/agents/linux/bin/*
 src/server/remember.db*
 src/server/logs.db*
 
+# Data directory
+data/
+

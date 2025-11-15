@@ -5,13 +5,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: remember-agent-linux
+    container_name: remember-agent
     ports:
       - "5002:5002"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=https://+:5002
     volumes:
+      - ./data:/app/data #For the token JWT store
       # Mount the file system you want to backup (adjust path as needed)
       # Example: Mount specific directory instead of entire filesystem
       - /:/host:ro  # Read-only mount of host filesystem

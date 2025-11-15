@@ -3,16 +3,16 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Copy csproj files and restore dependencies
-COPY ["server.csproj", "./"]
-RUN dotnet restore "server.csproj"
+COPY ["src/server/server.csproj", "src/server/"]
+RUN dotnet restore "src/server/server.csproj"
 
 # Copy everything else and build
 COPY . .
-RUN dotnet build "server.csproj" -c Release -o /app/build
+RUN dotnet build "src/server/server.csproj" -c Release -o /app/build
 
 # Publish stage
 FROM build AS publish
-RUN dotnet publish "server.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "src/server/server.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final

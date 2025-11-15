@@ -36,19 +36,48 @@ builder.Services.AddCors(options =>
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
+// Ensure data directory exists
+var dataDirectory = Path.Combine(Directory.GetCurrentDirectory(), "data");
+if (!Directory.Exists(dataDirectory))
+{
+    Directory.CreateDirectory(dataDirectory);
+}
+
+// Helper function to resolve database paths
+string ResolveDbPath(string connectionString)
+{
+    if (connectionString.StartsWith("Data Source="))
+    {
+        var dbPath = connectionString.Substring("Data Source=".Length);
+        // If path contains "data/", resolve it to the data directory
+        if (dbPath.StartsWith("data/") || dbPath.StartsWith("data\\"))
+        {
+            var fileName = Path.GetFileName(dbPath);
+            dbPath = Path.Combine(dataDirectory, fileName);
+        }
+        // If it's a relative path, make it relative to data directory
+        else if (!Path.IsPathRooted(dbPath))
+        {
+            dbPath = Path.Combine(dataDirectory, dbPath);
+        }
+        return $"Data Source={dbPath}";
+    }
+    return connectionString;
+}
+
 // Configure Entity Framework Core with SQLite
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
 builder.Services.AddDbContext<DBContext>(options =>
-    options.UseSqlite(connectionString));
+    options.UseSqlite(ResolveDbPath(connectionString)));
 
 // Configure separate SQLite database for logs
 var logsConnectionString = builder.Configuration.GetConnectionString("LogsConnection")
-    ?? "Data Source=logs.db";
+    ?? "Data Source=data/logs.db";
 
 builder.Services.AddDbContext<LogDbContext>(options =>
-    options.UseSqlite(logsConnectionString));
+    options.UseSqlite(ResolveDbPath(logsConnectionString)));
 
 // Configure JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("Jwt");

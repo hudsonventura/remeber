@@ -3,7 +3,7 @@ version: '3.8'
 services:
   server:
     build:
-      context: ./src/server
+      context: .
       dockerfile: Dockerfile
     container_name: remember-server
     ports:
@@ -12,18 +12,8 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:5000;https://+:5001
     volumes:
-      - server-data:/app/data
+      - ./data:/app/data
     restart: unless-stopped
     networks:
       - remember-network
 
-
-volumes:
-  server-data:
-    driver: local
-  agent-data:
-    driver: local
-
-networks:
-  remember-network:
-    driver: bridge

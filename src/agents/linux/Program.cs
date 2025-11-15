@@ -11,12 +11,41 @@ builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
+// Ensure data directory exists
+var dataDirectory = Path.Combine(Directory.GetCurrentDirectory(), "data");
+if (!Directory.Exists(dataDirectory))
+{
+    Directory.CreateDirectory(dataDirectory);
+}
+
+// Helper function to resolve database paths
+string ResolveDbPath(string connectionString)
+{
+    if (connectionString.StartsWith("Data Source="))
+    {
+        var dbPath = connectionString.Substring("Data Source=".Length);
+        // If path contains "data/", resolve it to the data directory
+        if (dbPath.StartsWith("data/") || dbPath.StartsWith("data\\"))
+        {
+            var fileName = Path.GetFileName(dbPath);
+            dbPath = Path.Combine(dataDirectory, fileName);
+        }
+        // If it's a relative path, make it relative to data directory
+        else if (!Path.IsPathRooted(dbPath))
+        {
+            dbPath = Path.Combine(dataDirectory, dbPath);
+        }
+        return $"Data Source={dbPath}";
+    }
+    return connectionString;
+}
+
 // Configure SQLite database
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? "Data Source=agent.db";
+    ?? "Data Source=data/agent.db";
 
 builder.Services.AddDbContext<AgentDbContext>(options =>
-    options.UseSqlite(connectionString));
+    options.UseSqlite(ResolveDbPath(connectionString)));
 
 var app = builder.Build();
 
