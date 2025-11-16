@@ -6,6 +6,7 @@ namespace server.Models;
 public class Agent
 {
     public Guid id { get; set; } = new Guid();
+    public string name { get; set; } = "New Agent";
     public string hostname { get; set; } = string.Empty;
     public string? token { get; set; }
 }

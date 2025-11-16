@@ -21,7 +21,7 @@ export function Sidebar() {
         <img 
           src="/icon.png" 
           alt="Remember" 
-          className="h-16 w-16"
+          className="h-14 w-16"
         />
         <h2 className="text-lg font-semibold">Remember Backup System</h2>
       </div>

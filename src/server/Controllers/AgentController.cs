@@ -75,6 +75,7 @@ public class AgentController : ControllerBase
         var agent = new Agent
         {
             id = Guid.NewGuid(),
+            name = string.IsNullOrWhiteSpace(request.Name) ? "New Agent" : request.Name.Trim(),
             hostname = hostname,
             token = agentToken // Token is required
         };
@@ -213,8 +214,12 @@ public class AgentController : ControllerBase
                 return NotFound(new { message = "Agent not found" });
             }
 
-            // Update hostname
+            // Update hostname and name
             agent.hostname = request.Hostname.Trim();
+            if (!string.IsNullOrWhiteSpace(request.Name))
+            {
+                agent.name = request.Name.Trim();
+            }
 
             await _context.SaveChangesAsync();
 

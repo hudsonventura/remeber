@@ -11,6 +11,7 @@ import { CronDescription } from "@/components/CronDescription"
 
 interface Agent {
   id: string
+  name: string
   hostname: string
 }
 
@@ -126,7 +127,7 @@ export function AddBackupPlan() {
             <h1 className="text-3xl font-bold">Add Backup Plan</h1>
             {agent && (
               <p className="text-muted-foreground mt-2">
-                For agent: <span className="font-medium">{agent.hostname}</span>
+                For agent: <span className="font-medium">{agent.name}</span>
               </p>
             )}
           </div>

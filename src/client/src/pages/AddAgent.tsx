@@ -7,6 +7,7 @@ import { apiPost } from "@/lib/api"
 
 export function AddAgent() {
   const navigate = useNavigate()
+  const [name, setName] = useState("New Agent")
   const [hostname, setHostname] = useState("")
   const [pairingCode, setPairingCode] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -36,10 +37,12 @@ export function AddAgent() {
       }
 
       await apiPost("/api/agent", {
+        name: name.trim(),
         hostname: hostname.trim(),
         pairingCode: pairingCode.trim(),
       })
       setSuccess(true)
+      setName("New Agent")
       setHostname("")
       setPairingCode("")
       
@@ -83,7 +86,24 @@ export function AddAgent() {
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="hostname">Hostname</Label>
+            <Label htmlFor="name">Name *</Label>
+            <Input
+              id="name"
+              type="text"
+              placeholder="New Agent"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              disabled={isLoading}
+              className="max-w-md"
+            />
+            <p className="text-sm text-muted-foreground">
+              A friendly name to identify this agent
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="hostname">Hostname *</Label>
             <Input
               id="hostname"
               type="text"

@@ -19,12 +19,14 @@ import {
 
 interface Agent {
   id: string
+  name: string
   hostname: string
 }
 
 export function EditAgent() {
   const navigate = useNavigate()
   const { id } = useParams()
+  const [name, setName] = useState("")
   const [hostname, setHostname] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingData, setIsLoadingData] = useState(true)
@@ -51,6 +53,7 @@ export function EditAgent() {
         }
 
         const agentData: Agent = await apiGet<Agent>(`/api/agent/${id}`)
+        setName(agentData.name)
         setHostname(agentData.hostname)
       } catch (err) {
         setError(err instanceof Error ? err.message : "An error occurred")
@@ -81,6 +84,7 @@ export function EditAgent() {
         }
 
         await apiPut(`/api/agent/${id}`, {
+          name: name.trim(),
           hostname: hostname.trim(),
         })
 
@@ -207,7 +211,7 @@ export function EditAgent() {
           <div>
             <h1 className="text-3xl font-bold">Edit Agent</h1>
             <p className="text-muted-foreground mt-2">
-              Update the agent hostname
+              Update the agent name and hostname
             </p>
           </div>
         </div>
@@ -227,6 +231,22 @@ export function EditAgent() {
 
       <div className="rounded-lg border bg-card p-6 shadow-sm max-w-3xl">
         <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="name">Name *</Label>
+            <Input
+              id="name"
+              type="text"
+              placeholder="New Agent"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              disabled={isLoading}
+            />
+            <p className="text-sm text-muted-foreground">
+              A friendly name to identify this agent
+            </p>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="hostname">Hostname *</Label>
             <Input
@@ -273,7 +293,7 @@ export function EditAgent() {
                       <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                       <AlertDialogDescription>
                         This action cannot be undone. This will permanently delete the agent
-                        <strong> {hostname}</strong> and all of its backup plans.
+                        <strong> {name}</strong> and all of its backup plans.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

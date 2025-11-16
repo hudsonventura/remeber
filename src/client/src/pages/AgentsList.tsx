@@ -17,6 +17,7 @@ import {
 
 interface Agent {
   id: string
+  name: string
   hostname: string
 }
 
@@ -50,7 +51,7 @@ export function AgentsList() {
     }
   }
 
-  const handleDelete = async (agentId: string, _hostname: string) => {
+  const handleDelete = async (agentId: string, _name: string) => {
     try {
       const token = sessionStorage.getItem("token")
       if (!token) {
@@ -140,6 +141,9 @@ export function AgentsList() {
               <thead>
                 <tr className="border-b">
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                    Name
+                  </th>
+                  <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
                     Hostname
                   </th>
                   <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
@@ -158,6 +162,12 @@ export function AgentsList() {
                   >
                     <td 
                       className="p-4 align-middle font-medium cursor-pointer"
+                      onClick={() => navigate(`/agents/${agent.id}/backup-plans`)}
+                    >
+                      {agent.name}
+                    </td>
+                    <td 
+                      className="p-4 align-middle text-sm text-muted-foreground cursor-pointer"
                       onClick={() => navigate(`/agents/${agent.id}/backup-plans`)}
                     >
                       {agent.hostname}
@@ -198,13 +208,13 @@ export function AgentsList() {
                               <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                               <AlertDialogDescription>
                                 This action cannot be undone. This will permanently delete the agent
-                                <strong> {agent.hostname}</strong> and all of its backup plans.
+                                <strong> {agent.name}</strong> and all of its backup plans.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Cancel</AlertDialogCancel>
                               <AlertDialogAction
-                                onClick={() => handleDelete(agent.id, agent.hostname)}
+                                onClick={() => handleDelete(agent.id, agent.name)}
                                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                               >
                                 Delete

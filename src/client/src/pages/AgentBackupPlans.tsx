@@ -29,6 +29,7 @@ interface BackupPlan {
 
 interface Agent {
   id: string
+  name: string
   hostname: string
 }
 
@@ -196,7 +197,7 @@ export function AgentBackupPlans() {
               Backup Plans
               {agent && (
                 <span className="text-muted-foreground text-xl ml-2">
-                  - {agent.hostname}
+                  - {agent.name}
                 </span>
               )}
             </h1>
