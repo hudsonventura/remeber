@@ -422,19 +422,14 @@ public class AgentController : ControllerBase
             protocolsToTry = new[] { "https://", "http://" };
         }
 
-        // Configure HttpClient to accept self-signed certificates in development
+        // Configure HttpClient to accept self-signed certificates (always ignore certificate validation)
         var httpClientHandler = new HttpClientHandler();
-        
-        // In development, bypass SSL certificate validation for self-signed certificates
-        if (_environment.IsDevelopment())
-        {
-            httpClientHandler.ServerCertificateCustomValidationCallback = 
-                (HttpRequestMessage message, X509Certificate2? certificate, X509Chain? chain, SslPolicyErrors sslPolicyErrors) =>
-                {
-                    // Accept all certificates in development
-                    return true;
-                };
-        }
+        httpClientHandler.ServerCertificateCustomValidationCallback = 
+            (HttpRequestMessage message, X509Certificate2? certificate, X509Chain? chain, SslPolicyErrors sslPolicyErrors) =>
+            {
+                // Accept all certificates (ignore certificate validation)
+                return true;
+            };
 
         using var httpClient = new HttpClient(httpClientHandler);
         httpClient.Timeout = TimeSpan.FromSeconds(5);

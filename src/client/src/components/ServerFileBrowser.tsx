@@ -18,9 +18,10 @@ interface ServerFileBrowserProps {
   open: boolean
   onClose: () => void
   onSelect: (path: string) => void
+  initialPath?: string
 }
 
-export function ServerFileBrowser({ open, onClose, onSelect }: ServerFileBrowserProps) {
+export function ServerFileBrowser({ open, onClose, onSelect, initialPath }: ServerFileBrowserProps) {
   const [currentPath, setCurrentPath] = useState("")
   const [items, setItems] = useState<FileSystemItem[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -29,13 +30,21 @@ export function ServerFileBrowser({ open, onClose, onSelect }: ServerFileBrowser
 
   useEffect(() => {
     if (open) {
-      // Start with empty path - server will determine the default root based on OS
-      const initialPath = ""
-      setCurrentPath(initialPath)
-      setPathHistory([initialPath])
-      loadDirectory(initialPath)
+      // Use initialPath if provided, otherwise start with empty path
+      // Use the path as-is - if it's a directory, it will work; if it's a file, the API will handle it
+      let startPath = ""
+      if (initialPath) {
+        const normalizedPath = initialPath.trim()
+        if (normalizedPath) {
+          // Remove trailing slashes to normalize, but keep the path as-is
+          startPath = normalizedPath.replace(/[/\\]+$/, "")
+        }
+      }
+      setCurrentPath(startPath)
+      setPathHistory([startPath])
+      loadDirectory(startPath)
     }
-  }, [open])
+  }, [open, initialPath])
 
   const loadDirectory = async (path: string) => {
     setIsLoading(true)

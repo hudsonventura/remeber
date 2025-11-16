@@ -513,6 +513,7 @@ export function EditBackupPlan() {
             setSource(path)
             setShowFileBrowser(false)
           }}
+          initialPath={source}
         />
       )}
 
@@ -523,6 +524,7 @@ export function EditBackupPlan() {
           setDestination(path)
           setShowServerFileBrowser(false)
         }}
+        initialPath={destination}
       />
 
       <SimulationResults

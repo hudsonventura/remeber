@@ -285,6 +285,7 @@ export function AddBackupPlan() {
             setSource(path)
             setShowFileBrowser(false)
           }}
+          initialPath={source}
         />
       )}
 
@@ -295,6 +296,7 @@ export function AddBackupPlan() {
           setDestination(path)
           setShowServerFileBrowser(false)
         }}
+        initialPath={destination}
       />
     </div>
   )

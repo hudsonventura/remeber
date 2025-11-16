@@ -192,6 +192,26 @@ var logsConnectionString = builder.Configuration.GetConnectionString("LogsConnec
 builder.Services.AddDbContext<LogDbContext>(options =>
     options.UseSqlite(ResolveDbPath(logsConnectionString)));
 
+// Apply migrations to LogDbContext
+using (var logContext = new LogDbContext(new DbContextOptionsBuilder<LogDbContext>()
+    .UseSqlite(ResolveDbPath(logsConnectionString))
+    .Options))
+{
+    try
+    {
+        logContext.Database.Migrate();
+        Console.WriteLine("Log database migrations applied successfully.");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error migrating log database: {ex.Message}");
+        if (builder.Environment.IsDevelopment())
+        {
+            throw;
+        }
+    }
+}
+
 // Configure JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("Jwt");
 var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey is not configured");

@@ -19,9 +19,10 @@ interface FileBrowserProps {
   open: boolean
   onClose: () => void
   onSelect: (path: string) => void
+  initialPath?: string
 }
 
-export function FileBrowser({ agentId, open, onClose, onSelect }: FileBrowserProps) {
+export function FileBrowser({ agentId, open, onClose, onSelect, initialPath }: FileBrowserProps) {
   const [currentPath, setCurrentPath] = useState("/")
   const [items, setItems] = useState<FileSystemItem[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -30,11 +31,21 @@ export function FileBrowser({ agentId, open, onClose, onSelect }: FileBrowserPro
 
   useEffect(() => {
     if (open) {
-      setCurrentPath("/")
-      setPathHistory(["/"])
-      loadDirectory("/")
+      // Use initialPath if provided, otherwise default to "/"
+      // Use the path as-is - if it's a directory, it will work; if it's a file, the API will handle it
+      let startPath = "/"
+      if (initialPath) {
+        const normalizedPath = initialPath.trim()
+        if (normalizedPath) {
+          // Remove trailing slashes to normalize, but keep the path as-is
+          startPath = normalizedPath.replace(/[/\\]+$/, "") || "/"
+        }
+      }
+      setCurrentPath(startPath)
+      setPathHistory([startPath])
+      loadDirectory(startPath)
     }
-  }, [open, agentId])
+  }, [open, agentId, initialPath])
 
   const loadDirectory = async (path: string) => {
     setIsLoading(true)
