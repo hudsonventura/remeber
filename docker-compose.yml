@@ -9,7 +9,8 @@ services:
       - "5001:5001"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
-      - ASPNETCORE_URLS=http://+:5000;https://+:5001
+      - ASPNETCORE_URLS=https://+:5001
+      - CLIENT_DEV_MODE=true
     volumes:
       - ./data:/app/data
     restart: unless-stopped

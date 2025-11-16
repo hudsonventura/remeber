@@ -165,9 +165,9 @@ export function ServerFileBrowser({ open, onClose, onSelect }: ServerFileBrowser
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="font-medium truncate">{item.name}</div>
-                    {item.type === "file" && item.size !== null && (
+                    {item.type === "file" && item.size != null && (
                       <div className="text-xs text-muted-foreground">
-                        {(item.size / 1024).toFixed(2)} KB
+                        {((item.size ?? 0) / 1024).toFixed(2)} KB
                       </div>
                     )}
                   </div>

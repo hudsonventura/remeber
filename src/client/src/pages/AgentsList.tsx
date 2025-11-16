@@ -50,7 +50,7 @@ export function AgentsList() {
     }
   }
 
-  const handleDelete = async (agentId: string, hostname: string) => {
+  const handleDelete = async (agentId: string, _hostname: string) => {
     try {
       const token = sessionStorage.getItem("token")
       if (!token) {

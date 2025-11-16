@@ -249,15 +249,33 @@ else
     app.UseHttpsRedirection();
 }
 
+// Serve static files from wwwroot (React app build)
+// This should be early but API routes will still take precedence via endpoint routing
+app.UseStaticFiles();
+
+// Log static files configuration for debugging
+var wwwrootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+var logger = app.Services.GetRequiredService<ILogger<Program>>();
+if (Directory.Exists(wwwrootPath))
+{
+    var files = Directory.GetFiles(wwwrootPath, "*", SearchOption.AllDirectories);
+    logger.LogInformation("Static files enabled. Serving from: {Path} ({Count} files found)", wwwrootPath, files.Length);
+}
+else
+{
+    logger.LogWarning("wwwroot directory not found at: {Path}. Static files may not be served.", wwwrootPath);
+}
+
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Map API controllers
 app.MapControllers();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+// Fallback to index.html for client-side routing (SPA)
+// This must be last so all non-API routes serve the React app
+app.MapFallbackToFile("index.html");
+
 
 // Protected endpoint example
 app.MapGet("/api/protected", () =>

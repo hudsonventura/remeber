@@ -63,7 +63,7 @@ export function BackupPlansList() {
     fetchData()
   }, [navigate])
 
-  const handleDelete = async (planId: string, planName: string) => {
+  const handleDelete = async (planId: string, _planName: string) => {
     try {
       const token = sessionStorage.getItem("token")
       if (!token) {
