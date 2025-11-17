@@ -1,4 +1,7 @@
+using System;
+using System.ComponentModel;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Interactivity;
 using Microsoft.EntityFrameworkCore;
 using AgentCommon.Data;
@@ -9,11 +12,15 @@ namespace agentWindows;
 public partial class MainWindow : Window
 {
     private PairingViewModel? _viewModel;
+    private bool _isExiting = false;
 
     public MainWindow()
     {
         InitializeComponent();
         InitializeViewModel();
+        
+        // Handle window closing event
+        Closing += OnWindowClosing;
     }
 
     private async void InitializeViewModel()
@@ -37,6 +44,35 @@ public partial class MainWindow : Window
         if (_viewModel != null)
         {
             await _viewModel.RefreshCode();
+        }
+    }
+
+    private void OnWindowClosing(object? sender, CancelEventArgs e)
+    {
+        // If not explicitly exiting, minimize to tray instead of closing
+        if (!_isExiting)
+        {
+            e.Cancel = true;
+            Hide();
+        }
+    }
+
+    public void ShowWindow()
+    {
+        Show();
+        WindowState = WindowState.Normal;
+        Activate();
+    }
+
+    public void ExitApplication()
+    {
+        _isExiting = true;
+        Close();
+        
+        // Shutdown the application
+        if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+        {
+            desktop.Shutdown();
         }
     }
 }
