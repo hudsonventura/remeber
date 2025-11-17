@@ -1,0 +1,22 @@
+meta {
+  name: /Pairing/verify
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{agent.url}}/Pairing/verify
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "Code": "848015"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

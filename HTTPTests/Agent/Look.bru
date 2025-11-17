@@ -1,0 +1,26 @@
+meta {
+  name: /Look
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{agent.url}}/Look?dir=C:/Users/hudson.ventura/Desktop/DBGate Atualizado
+  body: none
+  auth: inherit
+}
+
+params:query {
+  dir: C:/Users/hudson.ventura/Desktop/DBGate Atualizado
+}
+
+body:json {
+  {
+    "Code": "848015"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
