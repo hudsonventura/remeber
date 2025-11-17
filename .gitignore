@@ -17,3 +17,5 @@ src/server/logs.db*
 # Data directory
 data/
 
+src/agents/windows/obj/*
+src/agents/windows/bin/*
