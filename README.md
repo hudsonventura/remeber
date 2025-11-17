@@ -126,7 +126,7 @@ Soon
 ##### Step 6.4: Agent Code
 The agent generates an authorization code required to connect to it. This adds an extra layer of security and prevents unauthorized users from connecting to the agent.  
 
-> [!CAUTION] Agent Code
+> [!CAUTION] 
 > When the agent is running, it will generate a code. Make sure to write it down. This code will be valid for 10 minutes. If that time passes, turn the agent off and back on so it can generate a new code.  
 
 ![Agent Code](assets/agent_code.png)
@@ -191,13 +191,15 @@ Before running an actual backup, it's recommended to simulate it first to see wh
 
 ![Agent Code](assets/backupplan_created.png)
 
+
+
 3. Wait for the simulation to complete. The results will show:
    - Files that will be copied
    - Files that will be deleted
    - Files that will be ignored (and why)
    - Total size of files to be transferred
 
-**Screenshot placeholder:** [Screenshot of simulation results dialog showing file operations]
+![Agent Code](assets/backplan_logs.png)
 
 4. Review the simulation results to ensure everything looks correct
 5. Click **"Close"** when done reviewing
@@ -209,19 +211,23 @@ Once you're satisfied with the simulation results, you can execute the backup:
 1. On the backup plan edit page, click the **"Execute Now"** button
 2. Confirm the execution in the dialog that appears
 
-**Screenshot placeholder:** [Screenshot of "Execute Now" button and confirmation dialog]
+![Agent Code](assets/backupplan_confirm_start.png)
 
 3. The backup will start running in the background
 4. You'll see a success message confirming the backup has started
 
-**Screenshot placeholder:** [Screenshot of backup execution success message]
 
 5. To monitor the backup progress:
    - Navigate to the backup plan's logs page
    - Click on **"View Logs"** or navigate to the logs section
    - You'll see real-time updates of files being copied, deleted, or ignored
 
-**Screenshot placeholder:** [Screenshot of backup logs showing file operations in progress]
+![Agent Code](assets/backupplan_log_click.png)
+
+![Agent Code](assets/backupplan_logs.png)
+
+
+
 
 ### Database
 
