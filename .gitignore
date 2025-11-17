@@ -2,10 +2,7 @@
 src/server/obj/*
 src/server/bin/*
 
-# Agent SQLite database
-src/agents/linux/agent.db*
-src/agents/linux/obj/*
-src/agents/linux/bin/*
+
 
 # Environment variables
 .env
@@ -17,5 +14,13 @@ src/server/logs.db*
 # Data directory
 data/
 
+# Agent SQLite database
+src/agents/linux/agent.db*
+src/agents/linux/obj/*
+src/agents/linux/bin/*
+
 src/agents/windows/obj/*
 src/agents/windows/bin/*
+
+src/agents/common/obj/*
+src/agents/common/bin/*
