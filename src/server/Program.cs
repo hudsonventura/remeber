@@ -13,7 +13,7 @@ using System.Security.Cryptography;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var workingDirectory = Directory.GetCurrentDirectory()+ "teste";
+var workingDirectory = Directory.GetCurrentDirectory();
 
 
 // Add services to the container.

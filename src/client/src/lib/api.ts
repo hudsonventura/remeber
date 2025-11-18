@@ -9,6 +9,9 @@
 export const API_URL = import.meta.env.VITE_API_URL || ""
 
 console.log("API_URL", API_URL)
+if (API_URL === "") {
+  console.error("API_URL is not set")
+}
 
 /**
  * Get the authentication token from session storage

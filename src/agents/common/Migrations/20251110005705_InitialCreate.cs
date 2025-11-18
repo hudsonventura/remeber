@@ -11,34 +11,23 @@ namespace AgentCommon.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.CreateTable(
-                name: "agent_token",
-                columns: table => new
-                {
-                    id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    token = table.Column<string>(type: "TEXT", maxLength: 255, nullable: false),
-                    created_at = table.Column<DateTime>(type: "TEXT", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_agent_token", x => x.id);
-                });
+            // Check if tables exist before creating them (handles case where tables were created manually)
+            migrationBuilder.Sql(@"
+                CREATE TABLE IF NOT EXISTS agent_token (
+                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    token TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+            ");
 
-            migrationBuilder.CreateTable(
-                name: "pairing_code",
-                columns: table => new
-                {
-                    id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    code = table.Column<string>(type: "TEXT", maxLength: 6, nullable: false),
-                    created_at = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    expires_at = table.Column<DateTime>(type: "TEXT", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_pairing_code", x => x.id);
-                });
+            migrationBuilder.Sql(@"
+                CREATE TABLE IF NOT EXISTS pairing_code (
+                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    code TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL
+                );
+            ");
         }
 
         /// <inheritdoc />

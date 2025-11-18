@@ -11,21 +11,16 @@ namespace AgentCommon.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.CreateTable(
-                name: "certificate_config",
-                columns: table => new
-                {
-                    id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    certificatePath = table.Column<string>(type: "TEXT", maxLength: 500, nullable: false),
-                    certificatePassword = table.Column<string>(type: "TEXT", maxLength: 255, nullable: false),
-                    created_at = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "TEXT", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_certificate_config", x => x.id);
-                });
+            // Check if table exists before creating it (handles case where table was created manually)
+            migrationBuilder.Sql(@"
+                CREATE TABLE IF NOT EXISTS certificate_config (
+                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    certificatePath TEXT NOT NULL,
+                    certificatePassword TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+            ");
         }
 
         /// <inheritdoc />
