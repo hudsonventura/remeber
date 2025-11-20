@@ -185,8 +185,7 @@ using (var dbContext = new DBContext(new DbContextOptionsBuilder<DBContext>()
 }
 
 // Configure separate SQLite database for logs
-var logsConnectionString = builder.Configuration.GetConnectionString("LogsConnection")
-    ?? "Data Source=data/logs.db";
+var logsConnectionString = "Data Source=data/logs.db";
 
 builder.Services.AddDbContext<LogDbContext>(options =>
     options.UseSqlite(ResolveDbPath(logsConnectionString)));
@@ -211,9 +210,47 @@ using (var logContext = new LogDbContext(new DbContextOptionsBuilder<LogDbContex
     }
 }
 
-// Configure JWT Authentication
-var jwtSettings = builder.Configuration.GetSection("Jwt");
-var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey is not configured");
+// Configure JWT Authentication - Get or create JWT configuration from database
+string secretKey;
+string issuer;
+string audience;
+
+using (var dbContext = new DBContext(new DbContextOptionsBuilder<DBContext>()
+    .UseSqlite(ResolveDbPath(connectionString))
+    .Options))
+{
+    var jwtConfig = dbContext.JwtConfigs.FirstOrDefault();
+
+    if (jwtConfig == null)
+    {
+        // Generate a secure random JWT secret key (64 bytes = 512 bits)
+        var randomBytes = new byte[64];
+        using (var rng = RandomNumberGenerator.Create())
+        {
+            rng.GetBytes(randomBytes);
+        }
+        var generatedSecretKey = Convert.ToBase64String(randomBytes);
+
+        // Create default JWT configuration
+        jwtConfig = new JwtConfig
+        {
+            secretKey = generatedSecretKey,
+            issuer = "RememberApp",
+            audience = "RememberAppUsers",
+            created_at = DateTime.UtcNow,
+            updated_at = DateTime.UtcNow
+        };
+
+        dbContext.JwtConfigs.Add(jwtConfig);
+        dbContext.SaveChanges();
+
+        Console.WriteLine($"JWT configuration created. Issuer: {jwtConfig.issuer}, Audience: {jwtConfig.audience}");
+    }
+
+    secretKey = jwtConfig.secretKey;
+    issuer = jwtConfig.issuer;
+    audience = jwtConfig.audience;
+}
 
 builder.Services.AddAuthentication(options =>
 {
@@ -228,8 +265,8 @@ builder.Services.AddAuthentication(options =>
         ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-        ValidIssuer = jwtSettings["Issuer"],
-        ValidAudience = jwtSettings["Audience"],
+        ValidIssuer = issuer,
+        ValidAudience = audience,
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
     };
 });
