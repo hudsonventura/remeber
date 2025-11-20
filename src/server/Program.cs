@@ -68,8 +68,7 @@ string ResolveDbPath(string connectionString)
 }
 
 // Configure Entity Framework Core with SQLite
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+var connectionString = "Data Source=data/server.db";
 
 builder.Services.AddDbContext<DBContext>(options =>
     options.UseSqlite(ResolveDbPath(connectionString)));
@@ -83,29 +82,29 @@ System.Security.Cryptography.X509Certificates.X509Certificate2 GenerateSelfSigne
         rsa,
         System.Security.Cryptography.HashAlgorithmName.SHA256,
         System.Security.Cryptography.RSASignaturePadding.Pkcs1);
-    
+
     request.CertificateExtensions.Add(
         new System.Security.Cryptography.X509Certificates.X509KeyUsageExtension(
             System.Security.Cryptography.X509Certificates.X509KeyUsageFlags.DigitalSignature |
             System.Security.Cryptography.X509Certificates.X509KeyUsageFlags.KeyEncipherment,
             false));
-    
+
     request.CertificateExtensions.Add(
         new System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension(
             new System.Security.Cryptography.OidCollection {
                 new System.Security.Cryptography.Oid("1.3.6.1.5.5.7.3.1") // Server Authentication
             },
             false));
-    
+
     var sanBuilder = new System.Security.Cryptography.X509Certificates.SubjectAlternativeNameBuilder();
     sanBuilder.AddDnsName("localhost");
     sanBuilder.AddIpAddress(System.Net.IPAddress.Loopback);
     request.CertificateExtensions.Add(sanBuilder.Build());
-    
+
     var certificate = request.CreateSelfSigned(
         DateTimeOffset.UtcNow.AddDays(-1),
         DateTimeOffset.UtcNow.AddYears(1));
-    
+
     return certificate;
 }
 
@@ -127,10 +126,10 @@ using (var dbContext = new DBContext(new DbContextOptionsBuilder<DBContext>()
             throw;
         }
     }
-    
+
     // Get or create certificate configuration
     var certConfig = dbContext.CertificateConfigs.FirstOrDefault();
-    
+
     if (certConfig == null)
     {
         // Generate random certificate password (32 characters)
@@ -140,10 +139,10 @@ using (var dbContext = new DBContext(new DbContextOptionsBuilder<DBContext>()
             rng.GetBytes(randomBytes);
         }
         var password = Convert.ToBase64String(randomBytes);
-        
+
         // Generate certificate path
         var certPath = Path.Combine(dataDirectory, "server.pfx");
-        
+
         certConfig = new CertificateConfig
         {
             certificatePath = certPath,
@@ -151,13 +150,13 @@ using (var dbContext = new DBContext(new DbContextOptionsBuilder<DBContext>()
             created_at = DateTime.UtcNow,
             updated_at = DateTime.UtcNow
         };
-        
+
         dbContext.CertificateConfigs.Add(certConfig);
         dbContext.SaveChanges();
-        
+
         Console.WriteLine($"Certificate configuration created. Path: {certPath}");
     }
-    
+
     // Generate self-signed certificate if it doesn't exist
     if (!File.Exists(certConfig.certificatePath))
     {
@@ -174,7 +173,7 @@ using (var dbContext = new DBContext(new DbContextOptionsBuilder<DBContext>()
             throw;
         }
     }
-    
+
     // Configure Kestrel to use the certificate
     builder.WebHost.ConfigureKestrel(options =>
     {
