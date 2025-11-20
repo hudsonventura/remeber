@@ -11,7 +11,7 @@
       "label": "server: build"
     },
     {
-      "label": "client: dev",
+      "label": "client: run",
       "type": "shell",
       "command": "npm run dev",
       "isBackground": true,
@@ -35,15 +35,6 @@
         }
       }
     },
-    //   "options": {
-    //     "cwd": "${workspaceFolder}/src/client"
-    //   },
-    //   "dependsOn": "dotnet: build",
-    //   "presentation": {
-    //     "reveal": "always",
-    //     "panel": "dedicated"
-    //   }
-    // },
     {
       "label": "client: stop",
       "type": "shell",
@@ -52,6 +43,43 @@
       "options": {
         "cwd": "${workspaceFolder}/src/client"
       }
+    },
+    {
+      "label": "start: all",
+      "dependsOrder": "parallel",
+      "dependsOn": [
+        "server: build",
+        "client: run",
+        "agent: run"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "stop: all",
+      "dependsOrder": "parallel",
+      "dependsOn": [
+        "client: stop",
+        "agent: stop"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "type": "shell",
+      "problemMatcher": [],
+      "command": "dotnet build --configuration Debug",
+      "options": {
+        "cwd": "${workspaceFolder}/src/agents/windows"
+      },
+      "label": "agent windows: build"
+    },
+    {
+      "type": "shell",
+      "problemMatcher": [],
+      "command": "dotnet build --configuration Debug",
+      "options": {
+        "cwd": "${workspaceFolder}/src/agents/linux"
+      },
+      "label": "agent console: build"
     },
     {
       "label": "agent: run",
@@ -77,57 +105,19 @@
       "options": {
         "cwd": "${workspaceFolder}/src/agents/linux"
       },
-      "dependsOn": "dotnet: build",
       "presentation": {
         "reveal": "always",
         "panel": "dedicated"
       }
     },
-    // {
-    //   "label": "agent: stop",
-    //   "type": "shell",
-    //   "command": "pkill -f 'agent.dll' 2>/dev/null; pkill -f 'dotnet.*agent' 2>/dev/null; exit 0",
-    //   "problemMatcher": [],
-    //   "options": {
-    //     "cwd": "${workspaceFolder}/src/agents/linux"
-    //   }
-    // },
     {
-      "label": "start: all",
-      "dependsOrder": "parallel",
-      "dependsOn": [
-        "server: build",
-        "client: dev",
-        //"agent: run"
-      ],
-      "problemMatcher": []
-    },
-    {
-      "label": "stop: all",
-      "dependsOrder": "parallel",
-      "dependsOn": [
-        "client: stop",
-        "agent: stop"
-      ],
-      "problemMatcher": []
-    },
-    {
+      "label": "agent: stop",
       "type": "shell",
+      "command": "pkill -f 'agent' 2>/dev/null; pkill -f 'dotnet.*agent' 2>/dev/null; exit 0",
       "problemMatcher": [],
-      "command": "dotnet build --configuration Debug",
-      "options": {
-        "cwd": "${workspaceFolder}/src/agents/windows"
-      },
-      "label": "agent/windows"
-    },
-    {
-      "type": "shell",
-      "problemMatcher": [],
-      "command": "dotnet build --configuration Debug",
       "options": {
         "cwd": "${workspaceFolder}/src/agents/linux"
-      },
-      "label": "agent/console"
+      }
     },
   ]
 }
