@@ -1,0 +1,26 @@
+meta {
+  name: /Download a File
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{agent.url}}/Download?filePath=C:/Users/hudson.ventura/Desktop/DBGate Atualizado/vulkan-1.dll
+  body: none
+  auth: inherit
+}
+
+params:query {
+  filePath: C:/Users/hudson.ventura/Desktop/DBGate Atualizado/vulkan-1.dll
+}
+
+body:json {
+  {
+    "Code": "848015"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

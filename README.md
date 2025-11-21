@@ -15,7 +15,15 @@ This system centralizes backups from multiple sources. It’s designed to run al
 - Active/inactive backup plan management
 - Intelligent file comparison (by name and size) to minimize unnecessary transfers
 
+## API Testing
 
+The `HTTPTests` directory contains API test collections for use with [Bruno](https://www.usebruno.com/) - a modern, open-source API client.
+
+To use the test collections:
+1. Install Bruno from [https://www.usebruno.com/](https://www.usebruno.com/)
+2. Open Bruno and import the `HTTPTests` folder
+3. Configure the environment variables in `HTTPTests/environments/dev.bru`
+4. Run tests against the Server and Agent endpoints
 
 ## Getting Started
 

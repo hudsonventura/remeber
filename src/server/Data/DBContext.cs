@@ -22,7 +22,7 @@ public class DBContext : DbContext
         _configuration = configuration;
         _logger = logger;
     }
- 
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (!optionsBuilder.IsConfigured && _configuration != null)
@@ -33,19 +33,30 @@ public class DBContext : DbContext
         }
     }
 
-    public DbSet<Agent> Agents { get; set; }
-    public DbSet<BackupPlan> BackupPlans { get; set; }
-    public DbSet<CertificateConfig> CertificateConfigs { get; set; }
-    
+    public DbSet<Agent> Agents { get; set; } = null!;
+    public DbSet<BackupPlan> BackupPlans { get; set; } = null!;
+    public DbSet<CertificateConfig> CertificateConfigs { get; set; } = null!;
+    public DbSet<JwtConfig> JwtConfigs { get; set; } = null!;
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-        
+
         modelBuilder.Entity<CertificateConfig>(entity =>
         {
             entity.HasKey(e => e.id);
             entity.Property(e => e.certificatePath).IsRequired().HasMaxLength(500);
             entity.Property(e => e.certificatePassword).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.created_at).IsRequired();
+            entity.Property(e => e.updated_at).IsRequired();
+        });
+
+        modelBuilder.Entity<JwtConfig>(entity =>
+        {
+            entity.HasKey(e => e.id);
+            entity.Property(e => e.secretKey).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.issuer).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.audience).IsRequired().HasMaxLength(255);
             entity.Property(e => e.created_at).IsRequired();
             entity.Property(e => e.updated_at).IsRequired();
         });

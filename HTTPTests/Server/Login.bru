@@ -1,0 +1,23 @@
+meta {
+  name: /Login
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{server.url}}/Login
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "Email": "user@example.com",
+    "Password": "password123"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
