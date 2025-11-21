@@ -19,11 +19,47 @@ public class BackupLogController : ControllerBase
         _logger = logger;
     }
 
+    [HttpGet("/api/backupplan/{id}/executions")]
+    [ProducesResponseType(typeof(List<BackupExecutionResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetBackupPlanExecutions(Guid id)
+    {
+        try
+        {
+            // Verify backup plan exists
+            var backupPlan = await _context.BackupPlans.FindAsync(id);
+            if (backupPlan == null)
+            {
+                return NotFound(new { message = "Backup plan not found" });
+            }
+
+            var executions = await _logContext.BackupExecutions
+                .Where(e => e.backupPlanId == id)
+                .OrderByDescending(e => e.startDateTime)
+                .Select(e => new BackupExecutionResponse
+                {
+                    Id = e.id,
+                    Name = e.name,
+                    StartDateTime = e.startDateTime,
+                    EndDateTime = e.endDateTime
+                })
+                .ToListAsync();
+
+            return Ok(executions);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving executions for backup plan {BackupPlanId}", id);
+            return StatusCode(500, new { message = "An error occurred while retrieving executions", error = ex.Message });
+        }
+    }
+
     [HttpGet("/api/backupplan/{id}/logs")]
     [ProducesResponseType(typeof(List<LogEntryResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetBackupPlanLogs(
         Guid id, 
+        [FromQuery] Guid? executionId = null,
         [FromQuery] int page = 1, 
         [FromQuery] int pageSize = 100,
         [FromQuery] string? action = null,
@@ -46,6 +82,12 @@ public class BackupLogController : ControllerBase
 
             // Start with base query
             var query = _logContext.LogEntries.Where(log => log.backupPlanId == id);
+
+            // Filter by executionId if provided
+            if (executionId.HasValue)
+            {
+                query = query.Where(log => log.executionId == executionId.Value);
+            }
 
             // Apply filters
             if (!string.IsNullOrWhiteSpace(action) && action != "All")
@@ -199,5 +241,13 @@ public class LogSummaryResponse
     public int Deleted { get; set; }
     public int Ignored { get; set; }
     public DateTime? LastExecution { get; set; }
+}
+
+public class BackupExecutionResponse
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public DateTime StartDateTime { get; set; }
+    public DateTime? EndDateTime { get; set; }
 }
 

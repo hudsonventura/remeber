@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ArrowLeft, ChevronLeft, ChevronRight, X, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react"
+import { ArrowLeft, ChevronLeft, ChevronRight, X, ArrowUpDown, ArrowUp, ArrowDown, Clock, CheckCircle2 } from "lucide-react"
 import { apiGet } from "@/lib/api"
 
 interface LogEntry {
@@ -27,6 +27,13 @@ interface LogsResponse {
 interface BackupPlan {
   id: string
   name: string
+}
+
+interface BackupExecution {
+  id: string
+  name: string
+  startDateTime: string
+  endDateTime: string | null
 }
 
 function formatFileSize(bytes: number | null): string {
@@ -54,10 +61,24 @@ function formatDateTime(dateTime: string): string {
   }) + ' UTC'
 }
 
+function formatExecutionDateTime(dateTime: string): string {
+  const date = new Date(dateTime)
+  return date.toLocaleString('en-US', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'UTC'
+  }) + ' UTC'
+}
+
 export function BackupLogs() {
   const navigate = useNavigate()
-  const { planId } = useParams<{ planId: string }>()
+  const { planId, executionId } = useParams<{ planId: string; executionId?: string }>()
   const [backupPlan, setBackupPlan] = useState<BackupPlan | null>(null)
+  const [executions, setExecutions] = useState<BackupExecution[]>([])
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -83,8 +104,9 @@ export function BackupLogs() {
   const [sortBy, setSortBy] = useState("datetime")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
 
+  // Fetch executions list
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchExecutions = async () => {
       if (!planId) {
         setError("Backup plan ID is required")
         setIsLoading(false)
@@ -109,8 +131,54 @@ export function BackupLogs() {
           // If plan fetch fails, continue without name
         }
 
+        // Fetch executions
+        const executionsData: BackupExecution[] = await apiGet<BackupExecution[]>(`/api/backupplan/${planId}/executions`)
+        setExecutions(executionsData)
+      } catch (err) {
+        if (err instanceof TypeError && err.message === "Failed to fetch") {
+          setError("Unable to connect to the server. Please make sure the backend is running.")
+        } else {
+          setError(err instanceof Error ? err.message : "An error occurred while fetching executions")
+        }
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    // Only fetch executions if we're not viewing a specific execution
+    if (!executionId) {
+      fetchExecutions()
+    }
+  }, [planId, executionId, navigate])
+
+  // Fetch logs for specific execution
+  useEffect(() => {
+    const fetchLogs = async () => {
+      if (!planId || !executionId) {
+        return
+      }
+
+      setIsLoading(true)
+      setError(null)
+
+      try {
+        const token = sessionStorage.getItem("token")
+        if (!token) {
+          navigate("/login")
+          return
+        }
+
+        // Fetch backup plan name
+        try {
+          const planData: BackupPlan = await apiGet<BackupPlan>(`/api/backupplan/${planId}`)
+          setBackupPlan(planData)
+        } catch {
+          // If plan fetch fails, continue without name
+        }
+
         // Build query parameters
         const params = new URLSearchParams({
+          executionId: executionId,
           page: page.toString(),
           pageSize: pageSize.toString(),
           sortBy: sortBy,
@@ -157,8 +225,8 @@ export function BackupLogs() {
       }
     }
 
-    fetchData()
-  }, [planId, page, filters, sortBy, sortOrder, pageSize, navigate])
+    fetchLogs()
+  }, [planId, executionId, page, filters, sortBy, sortOrder, pageSize, navigate])
   
   // Debounce filename filter - wait 500ms after user stops typing
   useEffect(() => {
@@ -227,13 +295,135 @@ export function BackupLogs() {
     }
   }
 
-  if (isLoading) {
+  const handleExecutionClick = (execId: string) => {
+    navigate(`/backup-plans/${planId}/logs/${execId}`)
+  }
+
+  const handleBackToExecutions = () => {
+    navigate(`/backup-plans/${planId}/logs`)
+  }
+
+  if (isLoading && !executionId) {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4">
           <Button variant="outline" onClick={() => navigate("/backup-plans")}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Backup Plans
+          </Button>
+        </div>
+        <div className="rounded-lg border bg-card p-6 shadow-sm">
+          <p className="text-muted-foreground">Loading executions...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show executions list if no executionId
+  if (!executionId) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button variant="outline" onClick={() => navigate("/backup-plans")}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Backup Plans
+            </Button>
+            <div>
+              <h1 className="text-3xl font-bold">Backup Executions</h1>
+              {backupPlan && (
+                <p className="text-muted-foreground mt-2">
+                  {backupPlan.name}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {error && (
+          <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+
+        {!error && (
+          <>
+            {executions.length === 0 ? (
+              <div className="rounded-lg border bg-card p-6 shadow-sm">
+                <div className="text-center py-12">
+                  <p className="text-muted-foreground">No executions found for this backup plan</p>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-muted">
+                      <tr>
+                        <th className="text-left p-3 text-sm font-medium">Name</th>
+                        <th className="text-left p-3 text-sm font-medium">Start Time</th>
+                        <th className="text-left p-3 text-sm font-medium">End Time</th>
+                        <th className="text-left p-3 text-sm font-medium">Status</th>
+                        <th className="text-left p-3 text-sm font-medium">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {executions.map((execution) => (
+                        <tr key={execution.id} className="border-t hover:bg-muted/50">
+                          <td className="p-3 text-sm">
+                            {execution.name}
+                          </td>
+                          <td className="p-3 text-sm text-muted-foreground">
+                            {formatExecutionDateTime(execution.startDateTime)}
+                          </td>
+                          <td className="p-3 text-sm text-muted-foreground">
+                            {execution.endDateTime 
+                              ? formatExecutionDateTime(execution.endDateTime)
+                              : <span className="text-muted-foreground/50">In progress...</span>}
+                          </td>
+                          <td className="p-3 text-sm">
+                            {execution.endDateTime ? (
+                              <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                                <CheckCircle2 className="h-4 w-4" />
+                                Completed
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                                <Clock className="h-4 w-4" />
+                                Running
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-3 text-sm">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleExecutionClick(execution.id)}
+                            >
+                              View Logs
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    )
+  }
+
+  // Show logs for specific execution
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Button variant="outline" onClick={handleBackToExecutions}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Executions
           </Button>
         </div>
         <div className="rounded-lg border bg-card p-6 shadow-sm">
@@ -247,9 +437,9 @@ export function BackupLogs() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="outline" onClick={() => navigate("/backup-plans")}>
+          <Button variant="outline" onClick={handleBackToExecutions}>
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Backup Plans
+            Back to Executions
           </Button>
           <div>
             <h1 className="text-3xl font-bold">Backup Logs</h1>
@@ -441,7 +631,7 @@ export function BackupLogs() {
           {logs.length === 0 ? (
             <div className="rounded-lg border bg-card p-6 shadow-sm">
               <div className="text-center py-12">
-                <p className="text-muted-foreground">No logs found for this backup plan</p>
+                <p className="text-muted-foreground">No logs found for this execution</p>
               </div>
             </div>
           ) : (
@@ -511,4 +701,3 @@ export function BackupLogs() {
     </div>
   )
 }
-

@@ -7,6 +7,7 @@ public class LogEntry
 {
     public Guid id { get; set; } = Guid.NewGuid();
     public Guid backupPlanId { get; set; }
+    public Guid executionId { get; set; }
     public DateTime datetime { get; set; } = DateTime.UtcNow;
     public string fileName { get; set; } = string.Empty;
     public string filePath { get; set; } = string.Empty;

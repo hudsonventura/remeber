@@ -22,12 +22,33 @@ public class BackupPlanExecutor
 
     public async Task ExecuteBackupPlanAsync(BackupPlan backupPlan, Agent agent)
     {
+        Guid executionId = Guid.Empty;
         try
         {
             using var scope = _serviceScopeFactory.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<DBContext>();
 
             _logger.LogInformation("Executing backup plan {BackupPlanId} for agent {AgentHostname}", backupPlan.id, agent.hostname);
+
+            // Get log context for logging operations
+            var logContext = scope.ServiceProvider.GetRequiredService<LogDbContext>();
+
+            // Create backup execution record
+            var startDateTime = DateTime.UtcNow;
+            var executionName = $"execution of {backupPlan.name} at {startDateTime:yyyy/MM/dd HH:mm}";
+            var execution = new BackupExecution
+            {
+                id = Guid.NewGuid(),
+                backupPlanId = backupPlan.id,
+                name = executionName,
+                startDateTime = startDateTime
+            };
+            executionId = execution.id;
+            
+            logContext.BackupExecutions.Add(execution);
+            await logContext.SaveChangesAsync();
+
+            _logger.LogInformation("Created backup execution {ExecutionId} for backup plan {BackupPlanId}", executionId, backupPlan.id);
 
             // Reload agent from database to ensure we have the latest token
             var agentFromDb = await dbContext.Agents.FindAsync(agent.id);
@@ -69,31 +90,53 @@ public class BackupPlanExecutor
                 comparisonResult.NewItems.Count,
                 comparisonResult.DeletedItems.Count);
 
-            // Get log context for logging operations
-            var logContext = scope.ServiceProvider.GetRequiredService<LogDbContext>();
-
             // Delete files from destination that don't exist in source
-            await DeleteFilesFromDestination(comparisonResult.DeletedItems, backupPlan.destination, backupPlan.id, logContext);
+            await DeleteFilesFromDestination(comparisonResult.DeletedItems, backupPlan.destination, backupPlan.id, executionId, logContext);
 
             // Copy files from source (agent) to destination
-            await foreach (var copiedFile in CopyFilesFromSource(comparisonResult.NewItems, agentFromDb, backupPlan.source, backupPlan.destination, backupPlan.id, logContext, "Does not exist on destination"))
+            await foreach (var copiedFile in CopyFilesFromSource(comparisonResult.NewItems, agentFromDb, backupPlan.source, backupPlan.destination, backupPlan.id, executionId, logContext, "Does not exist on destination"))
             {
                 _logger.LogInformation("Copied file: {SourcePath} -> {DestinationPath}", copiedFile.SourcePath, copiedFile.DestinationPath);
             }
 
-            await foreach (var copiedFile in CopyFilesFromSource(comparisonResult.EditedItems, agentFromDb, backupPlan.source, backupPlan.destination, backupPlan.id, logContext, "Changed on source"))
+            await foreach (var copiedFile in CopyFilesFromSource(comparisonResult.EditedItems, agentFromDb, backupPlan.source, backupPlan.destination, backupPlan.id, executionId, logContext, "Changed on source"))
             {
                 _logger.LogInformation("Copied file: {SourcePath} -> {DestinationPath}", copiedFile.SourcePath, copiedFile.DestinationPath);
             }
 
             // Log files that were ignored (exist in both with same size)
-            await LogIgnoredFiles(sourceFileSystemItems, destinationFileSystemItems, backupPlan.id, logContext);
+            await LogIgnoredFiles(sourceFileSystemItems, destinationFileSystemItems, backupPlan.id, executionId, logContext);
+
+            // Update execution end time
+            execution.endDateTime = DateTime.UtcNow;
+            await logContext.SaveChangesAsync();
 
             _logger.LogInformation("Backup plan {BackupPlanId} execution completed successfully", backupPlan.id);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error executing backup plan {BackupPlanId}", backupPlan.id);
+            
+            // Update execution end time even on error
+            if (executionId != Guid.Empty)
+            {
+                try
+                {
+                    using var scope = _serviceScopeFactory.CreateScope();
+                    var logContext = scope.ServiceProvider.GetRequiredService<LogDbContext>();
+                    var execution = await logContext.BackupExecutions.FindAsync(executionId);
+                    if (execution != null)
+                    {
+                        execution.endDateTime = DateTime.UtcNow;
+                        await logContext.SaveChangesAsync();
+                    }
+                }
+                catch (Exception updateEx)
+                {
+                    _logger.LogWarning(updateEx, "Failed to update execution end time for {ExecutionId}", executionId);
+                }
+            }
+            
             throw;
         }
     }
@@ -477,7 +520,7 @@ public class BackupPlanExecutor
         return relativePath.Replace('\\', '/');
     }
 
-    private async Task DeleteFilesFromDestination(List<FileSystemItem> itemsToDelete, string destinationBasePath, Guid backupPlanId, LogDbContext logContext)
+    private async Task DeleteFilesFromDestination(List<FileSystemItem> itemsToDelete, string destinationBasePath, Guid backupPlanId, Guid executionId, LogDbContext logContext)
     {
         if (itemsToDelete.Count == 0)
         {
@@ -501,13 +544,13 @@ public class BackupPlanExecutor
                     _logger.LogDebug("Deleted file: {Path}", item.Path);
 
                     // Log the deletion
-                    await LogFileOperation(logContext, backupPlanId, item, "Delete", "Does not exist on source");
+                    await LogFileOperation(logContext, backupPlanId, executionId, item, "Delete", "Does not exist on source");
                 }
                 else if (item.Type == "file")
                 {
                     _logger.LogWarning("File does not exist, skipping deletion: {Path}", item.Path);
                     // Log as ignored since file doesn't exist
-                    await LogFileOperation(logContext, backupPlanId, item, "Ignored", "File does not exist, cannot delete");
+                    await LogFileOperation(logContext, backupPlanId, executionId, item, "Ignored", "File does not exist, cannot delete");
                 }
             }
             catch (UnauthorizedAccessException ex)
@@ -516,7 +559,7 @@ public class BackupPlanExecutor
                 _logger.LogWarning(ex, "Access denied when deleting file: {Path}", item.Path);
                 if (item.Type == "file")
                 {
-                    await LogFileOperation(logContext, backupPlanId, item, "Ignored", $"Access denied: {ex.Message}");
+                    await LogFileOperation(logContext, backupPlanId, executionId, item, "Ignored", $"Access denied: {ex.Message}");
                 }
             }
             catch (Exception ex)
@@ -525,7 +568,7 @@ public class BackupPlanExecutor
                 _logger.LogError(ex, "Error deleting file: {Path}", item.Path);
                 if (item.Type == "file")
                 {
-                    await LogFileOperation(logContext, backupPlanId, item, "Ignored", $"Error: {ex.Message}");
+                    await LogFileOperation(logContext, backupPlanId, executionId, item, "Ignored", $"Error: {ex.Message}");
                 }
             }
         }
@@ -545,6 +588,7 @@ public class BackupPlanExecutor
         string sourceBasePath,
         string destinationBasePath,
         Guid backupPlanId,
+        Guid executionId,
         LogDbContext logContext,
         string reason)
     {
@@ -593,14 +637,14 @@ public class BackupPlanExecutor
                 };
 
                 // Log the successful copy
-                await LogFileOperation(logContext, backupPlanId, sourceItem, "Copy", reason);
+                await LogFileOperation(logContext, backupPlanId, executionId, sourceItem, "Copy", reason);
             }
             catch (Exception ex)
             {
                 errorCount++;
                 _logger.LogError(ex, "Error copying file: {Path}", sourceItem.Path);
                 // Log the failed copy as ignored
-                await LogFileOperation(logContext, backupPlanId, sourceItem, "Ignored", $"Error copying: {ex.Message}");
+                await LogFileOperation(logContext, backupPlanId, executionId, sourceItem, "Ignored", $"Error copying: {ex.Message}");
             }
 
             // Yield the file info outside the try-catch so it can be logged immediately
@@ -846,7 +890,7 @@ public class BackupPlanExecutor
         }
     }
 
-    private async Task LogFileOperation(LogDbContext logContext, Guid backupPlanId, FileSystemItem item, string action, string reason)
+    private async Task LogFileOperation(LogDbContext logContext, Guid backupPlanId, Guid executionId, FileSystemItem item, string action, string reason)
     {
         try
         {
@@ -854,6 +898,7 @@ public class BackupPlanExecutor
             {
                 id = Guid.NewGuid(),
                 backupPlanId = backupPlanId,
+                executionId = executionId,
                 datetime = DateTime.UtcNow,
                 fileName = item.Name,
                 filePath = item.Path,
@@ -875,6 +920,7 @@ public class BackupPlanExecutor
         List<FileSystemItem> sourceItems,
         List<FileSystemItem> destinationItems,
         Guid backupPlanId,
+        Guid executionId,
         LogDbContext logContext)
     {
         try
@@ -889,7 +935,7 @@ public class BackupPlanExecutor
 
             foreach (var file in ignoredFiles)
             {
-                await LogFileOperation(logContext, backupPlanId, file, "Ignored", "File exists in both source and destination with same size");
+                await LogFileOperation(logContext, backupPlanId, executionId, file, "Ignored", "File exists in both source and destination with same size");
             }
         }
         catch (Exception ex)

@@ -32,6 +32,7 @@ function App() {
           <Route path="/backup-plans" element={<BackupPlansList />} />
           <Route path="/backup-plans/:planId/edit" element={<EditBackupPlan />} />
           <Route path="/backup-plans/:planId/logs" element={<BackupLogs />} />
+          <Route path="/backup-plans/:planId/logs/:executionId" element={<BackupLogs />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/about" element={<About />} />
