@@ -13,7 +13,18 @@ interface LogRetentionDateResponse {
 interface DeleteLogsResponse {
   executionsDeleted: number
   logsDeleted: number
+  spaceSavedBytes: number
   message: string
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B"
+  
+  const k = 1024
+  const sizes = ["B", "KB", "MB", "GB", "TB"]
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`
 }
 
 export function Settings() {
@@ -173,6 +184,9 @@ export function Settings() {
                   <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
                     <li>Executions deleted: {deleteResult.executionsDeleted}</li>
                     <li>Log entries deleted: {deleteResult.logsDeleted}</li>
+                    <li className="font-medium text-foreground">
+                      Disk space saved: {formatBytes(deleteResult.spaceSavedBytes)}
+                    </li>
                   </ul>
                   <p className="text-xs text-muted-foreground mt-2">
                     Database has been optimized to free disk space.

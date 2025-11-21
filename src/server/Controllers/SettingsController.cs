@@ -53,6 +53,22 @@ public class SettingsController : ControllerBase
         return connectionString;
     }
 
+    private string FormatBytes(long bytes)
+    {
+        if (bytes == 0) return "0 B";
+        
+        string[] sizes = { "B", "KB", "MB", "GB", "TB" };
+        int order = 0;
+        double size = bytes;
+        while (size >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            size = size / 1024;
+        }
+        
+        return $"{size:0.##} {sizes[order]}";
+    }
+
     [HttpGet("/api/settings/log-retention-date")]
     [ProducesResponseType(typeof(LogRetentionDateResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetLogRetentionDate()
@@ -153,11 +169,17 @@ public class SettingsController : ControllerBase
             var logsConnectionString = "Data Source=data/logs.db";
             var dbPath = ResolveDbPath(logsConnectionString);
 
+            long spaceSaved = 0;
+
             // Perform VACUUM to reclaim disk space
             if (!string.IsNullOrEmpty(dbPath) && System.IO.File.Exists(dbPath))
             {
                 try
                 {
+                    // Get file size before VACUUM
+                    var fileInfoBefore = new System.IO.FileInfo(dbPath);
+                    long sizeBefore = fileInfoBefore.Length;
+
                     // Close the current connection
                     await _logContext.Database.CloseConnectionAsync();
 
@@ -172,7 +194,13 @@ public class SettingsController : ControllerBase
                         }
                     }
 
-                    _logger.LogInformation("VACUUM completed successfully on {DbPath}", dbPath);
+                    // Get file size after VACUUM
+                    var fileInfoAfter = new System.IO.FileInfo(dbPath);
+                    long sizeAfter = fileInfoAfter.Length;
+
+                    spaceSaved = sizeBefore - sizeAfter;
+
+                    _logger.LogInformation("VACUUM completed successfully on {DbPath}. Space saved: {SpaceSaved} bytes", dbPath, spaceSaved);
                 }
                 catch (Exception ex)
                 {
@@ -181,11 +209,15 @@ public class SettingsController : ControllerBase
                 }
             }
 
+            // Format space saved for message
+            string spaceSavedFormatted = FormatBytes(spaceSaved);
+            
             var response = new DeleteLogsResponse
             {
                 ExecutionsDeleted = executionsToDelete.Count,
                 LogsDeleted = logsDeleted,
-                Message = $"Successfully deleted {executionsToDelete.Count} executions and {logsDeleted} log entries"
+                SpaceSavedBytes = spaceSaved,
+                Message = $"Successfully deleted {executionsToDelete.Count} executions and {logsDeleted} log entries. Disk space saved: {spaceSavedFormatted}"
             };
 
             return Ok(response);
@@ -217,6 +249,7 @@ public class DeleteLogsResponse
 {
     public int ExecutionsDeleted { get; set; }
     public int LogsDeleted { get; set; }
+    public long SpaceSavedBytes { get; set; }
     public string Message { get; set; } = string.Empty;
 }
 
