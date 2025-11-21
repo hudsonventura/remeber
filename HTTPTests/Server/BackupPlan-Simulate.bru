@@ -1,0 +1,20 @@
+meta {
+  name: /BackupPlan/Simulate
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{server.url}}/api/backupplan/:backupplan_id/simulate
+  body: none
+  auth: inherit
+}
+
+params:path {
+  backupplan_id: 1a31578d-e2f4-4ace-9f50-374cc761a6a5
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

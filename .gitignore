@@ -24,3 +24,4 @@ src/agents/windows/bin/*
 
 src/agents/common/obj/*
 src/agents/common/bin/*
+HTTPTests/environments/PROD.bru

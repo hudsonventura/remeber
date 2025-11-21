@@ -34,7 +34,7 @@ public class CustomLogger : ILogger
         Exception? exception,
         Func<TState, Exception?, string> formatter)
     {
-        
+
         // Always log - let the framework handle filtering via IsEnabled
         // But we check IsEnabled here as an extra safeguard
         if (!IsEnabled(logLevel))
@@ -47,16 +47,17 @@ public class CustomLogger : ILogger
         var timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss.fff Z");
         var category = _categoryName;
 
-         string logLevelString = logLevel switch {
-             LogLevel.Error =>       "[   ERROR   ]",
-             LogLevel.Critical =>    "[  CRITICAL ]",
-             LogLevel.Warning =>     "[  WARNING  ]",
-             LogLevel.Information => "[INFORMATION]",
-             LogLevel.Debug =>       "[   DEBUG   ]",
-             LogLevel.Trace =>       "[   TRACE   ]",
-             LogLevel.None =>        "[    NONE   ]",
-             _ =>                    "[  UNKNOWN  ]"
-         };
+        string logLevelString = logLevel switch
+        {
+            LogLevel.Error => "[   ERROR   ]",
+            LogLevel.Critical => "[  CRITICAL ]",
+            LogLevel.Warning => "[  WARNING  ]",
+            LogLevel.Information => "[INFORMATION]",
+            LogLevel.Debug => "[   DEBUG   ]",
+            LogLevel.Trace => "[   TRACE   ]",
+            LogLevel.None => "[    NONE   ]",
+            _ => "[  UNKNOWN  ]"
+        };
 
         // Custom logging logic here
         // You can write to file, database, external service, etc.
@@ -78,12 +79,12 @@ public class CustomLogger : ILogger
 
         if (exception != null)
         {
-            //Console.WriteLine($"\nException: {exception}");
+            Console.WriteLine($"\nException: {exception}");
         }
 
 
 
-        
+
     }
 
 
