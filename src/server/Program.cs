@@ -283,6 +283,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddSingleton<ITokenStore, TokenStore>();
 builder.Services.AddScoped<BackupPlanExecutor>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
 
 // Register hosted services
 builder.Services.AddHostedService<BackupRunner>();

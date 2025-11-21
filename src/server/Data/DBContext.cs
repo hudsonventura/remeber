@@ -38,6 +38,7 @@ public class DBContext : DbContext
     public DbSet<CertificateConfig> CertificateConfigs { get; set; } = null!;
     public DbSet<JwtConfig> JwtConfigs { get; set; } = null!;
     public DbSet<AppSettings> AppSettings { get; set; } = null!;
+    public DbSet<Notification> Notifications { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -72,6 +73,19 @@ public class DBContext : DbContext
             
             // Create unique index on key
             entity.HasIndex(e => e.key).IsUnique();
+        });
+
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.HasKey(e => e.id);
+            entity.Property(e => e.id).ValueGeneratedNever();
+            entity.Property(e => e.type).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.title).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.message).IsRequired().HasMaxLength(2000);
+            entity.Property(e => e.createdAt).IsRequired();
+            
+            // Create index on createdAt and isRead for faster queries
+            entity.HasIndex(e => new { e.createdAt, e.isRead });
         });
     }
 }

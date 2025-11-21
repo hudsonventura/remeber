@@ -1,6 +1,7 @@
 using System.Security.Cryptography.X509Certificates;
 using server.Data;
 using server.Models;
+using server.Services;
 
 namespace server.HostedServices;
 
@@ -112,6 +113,24 @@ public class BackupPlanExecutor
             await logContext.SaveChangesAsync();
 
             _logger.LogInformation("Backup plan {BackupPlanId} execution completed successfully", backupPlan.id);
+
+            // Create notification
+            try
+            {
+                var notificationService = scope.ServiceProvider.GetService<INotificationService>();
+                if (notificationService != null)
+                {
+                    await notificationService.CreateBackupCompletedNotificationAsync(
+                        backupPlan.id, 
+                        executionId, 
+                        backupPlan.name, 
+                        true);
+                }
+            }
+            catch (Exception notifEx)
+            {
+                _logger.LogWarning(notifEx, "Failed to create notification for backup plan {BackupPlanId}", backupPlan.id);
+            }
         }
         catch (Exception ex)
         {
@@ -129,6 +148,25 @@ public class BackupPlanExecutor
                     {
                         execution.endDateTime = DateTime.UtcNow;
                         await logContext.SaveChangesAsync();
+                    }
+
+                    // Create failure notification
+                    try
+                    {
+                        var notificationService = scope.ServiceProvider.GetService<INotificationService>();
+                        if (notificationService != null)
+                        {
+                            await notificationService.CreateBackupCompletedNotificationAsync(
+                                backupPlan.id, 
+                                executionId, 
+                                backupPlan.name, 
+                                false, 
+                                ex.Message);
+                        }
+                    }
+                    catch (Exception notifEx)
+                    {
+                        _logger.LogWarning(notifEx, "Failed to create failure notification for backup plan {BackupPlanId}", backupPlan.id);
                     }
                 }
                 catch (Exception updateEx)
@@ -880,6 +918,25 @@ public class BackupPlanExecutor
                 simulationResult.TotalItems,
                 simulationResult.ItemsToCopy,
                 simulationResult.ItemsToDelete);
+
+            // Create notification
+            try
+            {
+                var notificationService = scope.ServiceProvider.GetService<INotificationService>();
+                if (notificationService != null)
+                {
+                    await notificationService.CreateSimulationCompletedNotificationAsync(
+                        backupPlan.id,
+                        backupPlan.name,
+                        simulationResult.TotalItems,
+                        simulationResult.ItemsToCopy,
+                        simulationResult.ItemsToDelete);
+                }
+            }
+            catch (Exception notifEx)
+            {
+                _logger.LogWarning(notifEx, "Failed to create notification for simulation of backup plan {BackupPlanId}", backupPlan.id);
+            }
 
             return simulationResult;
         }
