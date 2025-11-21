@@ -37,6 +37,7 @@ public class DBContext : DbContext
     public DbSet<BackupPlan> BackupPlans { get; set; } = null!;
     public DbSet<CertificateConfig> CertificateConfigs { get; set; } = null!;
     public DbSet<JwtConfig> JwtConfigs { get; set; } = null!;
+    public DbSet<AppSettings> AppSettings { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -59,6 +60,18 @@ public class DBContext : DbContext
             entity.Property(e => e.audience).IsRequired().HasMaxLength(255);
             entity.Property(e => e.created_at).IsRequired();
             entity.Property(e => e.updated_at).IsRequired();
+        });
+
+        modelBuilder.Entity<AppSettings>(entity =>
+        {
+            entity.HasKey(e => e.id);
+            entity.Property(e => e.key).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.value).IsRequired().HasMaxLength(1000);
+            entity.Property(e => e.created_at).IsRequired();
+            entity.Property(e => e.updated_at).IsRequired();
+            
+            // Create unique index on key
+            entity.HasIndex(e => e.key).IsUnique();
         });
     }
 }
