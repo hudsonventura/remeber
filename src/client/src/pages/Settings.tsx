@@ -10,6 +10,10 @@ interface LogRetentionDateResponse {
   date: string | null
 }
 
+interface LogRetentionPeriodResponse {
+  months: number | null
+}
+
 interface DeleteLogsResponse {
   executionsDeleted: number
   logsDeleted: number
@@ -30,7 +34,9 @@ function formatBytes(bytes: number): string {
 export function Settings() {
   const navigate = useNavigate()
   const [logRetentionDate, setLogRetentionDate] = useState<string>("")
+  const [logRetentionMonths, setLogRetentionMonths] = useState<string>("")
   const [isLoading, setIsLoading] = useState(false)
+  const [isSavingPeriod, setIsSavingPeriod] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -45,17 +51,22 @@ export function Settings() {
           return
         }
 
-        const response: LogRetentionDateResponse = await apiGet<LogRetentionDateResponse>(
-          "/api/settings/log-retention-date"
-        )
+        const [dateResponse, periodResponse] = await Promise.all([
+          apiGet<LogRetentionDateResponse>("/api/settings/log-retention-date"),
+          apiGet<LogRetentionPeriodResponse>("/api/settings/log-retention-period")
+        ])
 
-        if (response.date) {
+        if (dateResponse.date) {
           // Convert date string to YYYY-MM-DD format for input
-          const date = new Date(response.date)
+          const date = new Date(dateResponse.date)
           setLogRetentionDate(date.toISOString().split('T')[0])
         }
+
+        if (periodResponse.months !== null && periodResponse.months !== undefined) {
+          setLogRetentionMonths(periodResponse.months.toString())
+        }
       } catch (err) {
-        console.error("Error fetching log retention date:", err)
+        console.error("Error fetching log retention settings:", err)
       }
     }
 
@@ -77,6 +88,31 @@ export function Settings() {
       setError(err instanceof Error ? err.message : "Failed to save log retention date")
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleSavePeriod = async () => {
+    setIsSavingPeriod(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const months = logRetentionMonths ? parseInt(logRetentionMonths) : null
+      if (months !== null && months < 0) {
+        setError("Retention period must be 0 or greater")
+        setIsSavingPeriod(false)
+        return
+      }
+
+      await apiPost("/api/settings/log-retention-period", {
+        months: months
+      })
+
+      setSuccess("Log retention period saved successfully")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save log retention period")
+    } finally {
+      setIsSavingPeriod(false)
     }
   }
 
@@ -163,6 +199,35 @@ export function Settings() {
                   <Trash2 className="h-4 w-4 mr-2" />
                   {isDeleting ? "Deleting..." : "Delete Logs Before Date"}
                 </Button>
+              </div>
+
+              <div className="border-t pt-4 mt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="log-retention-months">Automatic deletion period (months)</Label>
+                  <Input
+                    id="log-retention-months"
+                    type="number"
+                    min="0"
+                    value={logRetentionMonths}
+                    onChange={(e) => setLogRetentionMonths(e.target.value)}
+                    placeholder="e.g., 3 (for 3 months)"
+                    className="max-w-xs"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Set the number of months to keep logs. Logs older than this period will be automatically deleted every hour. Set to 0 or leave empty to disable automatic deletion.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-4 mt-4">
+                  <Button
+                    onClick={handleSavePeriod}
+                    disabled={isSavingPeriod}
+                    variant="default"
+                  >
+                    <Save className="h-4 w-4 mr-2" />
+                    {isSavingPeriod ? "Saving..." : "Save Period"}
+                  </Button>
+                </div>
               </div>
 
               {error && (

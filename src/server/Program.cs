@@ -286,6 +286,7 @@ builder.Services.AddScoped<BackupPlanExecutor>();
 
 // Register hosted services
 builder.Services.AddHostedService<BackupRunner>();
+builder.Services.AddHostedService<LogRetentionService>();
 
 var app = builder.Build();
 

@@ -130,6 +130,72 @@ public class SettingsController : ControllerBase
         }
     }
 
+    [HttpGet("/api/settings/log-retention-period")]
+    [ProducesResponseType(typeof(LogRetentionPeriodResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetLogRetentionPeriod()
+    {
+        try
+        {
+            var setting = await _context.AppSettings
+                .FirstOrDefaultAsync(s => s.key == "LogRetentionPeriodMonths");
+
+            var response = new LogRetentionPeriodResponse
+            {
+                Months = setting != null && int.TryParse(setting.value, out var months) ? months : null
+            };
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving log retention period");
+            return StatusCode(500, new { message = "An error occurred while retrieving log retention period", error = ex.Message });
+        }
+    }
+
+    [HttpPost("/api/settings/log-retention-period")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IActionResult> SetLogRetentionPeriod([FromBody] LogRetentionPeriodRequest request)
+    {
+        try
+        {
+            if (request.Months.HasValue && request.Months.Value < 0)
+            {
+                return BadRequest(new { message = "Retention period must be 0 or greater" });
+            }
+
+            var setting = await _context.AppSettings
+                .FirstOrDefaultAsync(s => s.key == "LogRetentionPeriodMonths");
+
+            if (setting == null)
+            {
+                setting = new AppSettings
+                {
+                    id = Guid.NewGuid(),
+                    key = "LogRetentionPeriodMonths",
+                    value = request.Months?.ToString() ?? string.Empty,
+                    created_at = DateTime.UtcNow,
+                    updated_at = DateTime.UtcNow
+                };
+                _context.AppSettings.Add(setting);
+            }
+            else
+            {
+                setting.value = request.Months?.ToString() ?? string.Empty;
+                setting.updated_at = DateTime.UtcNow;
+            }
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Log retention period saved successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error saving log retention period");
+            return StatusCode(500, new { message = "An error occurred while saving log retention period", error = ex.Message });
+        }
+    }
+
     [HttpPost("/api/settings/delete-logs-before-date")]
     [ProducesResponseType(typeof(DeleteLogsResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> DeleteLogsBeforeDate([FromBody] DeleteLogsRequest request)
@@ -238,6 +304,16 @@ public class LogRetentionDateRequest
 public class LogRetentionDateResponse
 {
     public DateTime? Date { get; set; }
+}
+
+public class LogRetentionPeriodRequest
+{
+    public int? Months { get; set; }
+}
+
+public class LogRetentionPeriodResponse
+{
+    public int? Months { get; set; }
 }
 
 public class DeleteLogsRequest
