@@ -21,7 +21,7 @@ public class BackupPlanExecutor
         _environment = environment;
     }
 
-    public async Task ExecuteBackupPlanAsync(BackupPlan backupPlan, Agent agent)
+    public async Task ExecuteBackupPlanAsync(BackupPlan backupPlan, Agent agent, bool isAutomatic = true)
     {
         Guid executionId = Guid.Empty;
         try
@@ -36,7 +36,8 @@ public class BackupPlanExecutor
 
             // Create backup execution record
             var startDateTime = DateTime.UtcNow;
-            var executionName = $"execution of {backupPlan.name} at {startDateTime:yyyy/MM/dd HH:mm}";
+            var executionType = isAutomatic ? "Automatic" : "Manual";
+            var executionName = $"{startDateTime:yyyy/MM/dd HH:mm} - {executionType} - {backupPlan.name}";
             var execution = new BackupExecution
             {
                 id = Guid.NewGuid(),

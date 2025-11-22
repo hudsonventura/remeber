@@ -312,12 +312,12 @@ public class BackupPlanController : ControllerBase
 
             var executor = HttpContext.RequestServices.GetRequiredService<BackupPlanExecutor>();
             
-            // Execute asynchronously in the background
+            // Execute asynchronously in the background (manual execution)
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    await executor.ExecuteBackupPlanAsync(backupPlan, backupPlan.agent);
+                    await executor.ExecuteBackupPlanAsync(backupPlan, backupPlan.agent, isAutomatic: false);
                     _logger.LogInformation("Manual execution of backup plan {BackupPlanId} completed successfully", id);
                 }
                 catch (Exception ex)
