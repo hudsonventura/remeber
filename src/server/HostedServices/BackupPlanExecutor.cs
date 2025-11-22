@@ -200,6 +200,7 @@ public class BackupPlanExecutor
         {
             // Try HTTPS first, then HTTP as fallback
             string[] protocolsToTry = new[] { "https://", "http://" };
+            var lastErrorMessage = string.Empty;
             foreach (var protocol in protocolsToTry)
             {
                 var testUrl = $"{protocol}{hostname}/Look?dir={Uri.EscapeDataString(sourcePath)}";
@@ -208,8 +209,9 @@ public class BackupPlanExecutor
                 {
                     return result.Items;
                 }
+                lastErrorMessage = result.ErrorMessage;
             }
-            throw new HttpRequestException($"Failed 3 to connect to agent at {agent.hostname}");
+            throw new HttpRequestException($"Failed 3 to connect to agent at {agent.hostname}, trying to get https://{hostname}/Look?dir={Uri.EscapeDataString(sourcePath)}. Error: {lastErrorMessage}");
         }
 
         var lookUrl = $"{baseUrl}/Look?dir={Uri.EscapeDataString(sourcePath)}";
