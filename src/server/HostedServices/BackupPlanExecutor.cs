@@ -209,7 +209,7 @@ public class BackupPlanExecutor
                     return result.Items;
                 }
             }
-            throw new HttpRequestException($"Failed to connect to agent at {agent.hostname}");
+            throw new HttpRequestException($"Failed 3 to connect to agent at {agent.hostname}");
         }
 
         var lookUrl = $"{baseUrl}/Look?dir={Uri.EscapeDataString(sourcePath)}";
@@ -725,7 +725,7 @@ public class BackupPlanExecutor
                     return;
                 }
             }
-            throw new HttpRequestException($"Failed to connect to agent at {agent.hostname} to download file");
+            throw new HttpRequestException($"Failed 4 to connect to agent at {agent.hostname} to download file");
         }
 
         var downloadUrl = $"{baseUrl}/Download?filePath={Uri.EscapeDataString(sourceFilePath)}";

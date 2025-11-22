@@ -336,7 +336,7 @@ public class AgentController : ControllerBase
                         return Ok(result.Items);
                     }
                 }
-                return StatusCode(503, new { message = "Failed to connect to agent" });
+                return StatusCode(503, new { message = "Failed 1 to connect to agent" });
             }
 
             var browseUrl = $"{baseUrl}/Browse?dir={Uri.EscapeDataString(dir ?? "/")}";
@@ -520,7 +520,7 @@ public class AgentController : ControllerBase
             }
             catch (HttpRequestException ex)
             {
-                _logger.LogWarning("Failed to connect to agent at {PingUrl}: {Error}", pingUrl, ex.Message);
+                _logger.LogWarning("Failed 2 to connect to agent at {PingUrl}: {Error}", pingUrl, ex.Message);
                 lastError = ex.Message;
                 // Continue to next protocol if available
             }
@@ -706,7 +706,7 @@ public class AgentController : ControllerBase
             if(ex.InnerException != null)
                 msg += $" - {ex.InnerException.Message}";
             
-            _logger.LogError(ex, "Failed to connect to agent for pairing verification at {Hostname}. Error: {Error}", hostname, msg);
+            _logger.LogError(ex, "Failed 5 to connect to agent for pairing verification at {Hostname}. Error: {Error}", hostname, msg);
             return (false, null, $"Cannot reach agent for pairing verification: {msg}");
         }
         catch (TaskCanceledException)
